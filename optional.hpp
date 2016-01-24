@@ -223,6 +223,13 @@ namespace stdext
 		return initialise ? optional<T>(t) : optional<T>();
 	}
 
+
+
+	template <typename T> struct is_optional : false_type {};
+	template <typename T> struct is_optional<const T> : is_optional<T> {};
+	template <typename T> struct is_optional<volatile T> : is_optional<T> {};
+	template <typename T> struct is_optional<optional<T>> : true_type {};
+
 }
 
 #endif
