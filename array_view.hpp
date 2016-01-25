@@ -421,6 +421,38 @@ namespace stdext
 				return std::make_tuple(prefix, stem);
 			}
 
+			template <typename S>
+				requires Sequence<S, T>
+			constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
+			{
+				auto combine = [values, length](auto index, auto element)
+				{
+					const auto keepTesting = index < length and values[index] == element;
+					return std::make_tuple(keepTesting, index + (keepTesting ? 1 : 0));
+				};
+				const auto lastIndex = fold(std::move(combine), std::size_t(0), sequence);
+				const auto prefix = array_view(values, lastIndex);
+				const auto stem = array_view(values + lastIndex, length - lastIndex);
+				auto postSequence = drop_strictly(lastIndex, std::move(sequence));
+				return std::make_tuple(prefix, stem, std::move(postSequence));
+			}
+
+			template <typename S, typename C>
+				requires Sequence<S> and Callable<C, bool, T, sequence_type_t<S>>
+			constexpr std::tuple<array_view, array_view, S> split_prefix (C compare, S sequence) const
+			{
+				auto combine = [compare=std::move(compare), values, length](auto index, auto element)
+				{
+					const auto keepTesting = index < length and compare(values[index], element);
+					return std::make_tuple(keepTesting, index + (keepTesting ? 1 : 0));
+				};
+				const auto lastIndex = fold(std::move(combine), std::size_t(0), sequence);
+				const auto prefix = array_view(values, lastIndex);
+				const auto stem = array_view(values + lastIndex, length - lastIndex);
+				auto postSequence = drop_strictly(lastIndex, std::move(sequence));
+				return std::make_tuple(prefix, stem, std::move(postSequence));
+			}
+
 			/// @}
 
 
@@ -612,6 +644,32 @@ namespace stdext
 		
 			/// @}
 
+
+
+
+
+
+
+			template <typename S>
+				requires BoundedSequence<S, T>
+			constexpr bool has_prefix (S prefix) const
+			{
+				auto combine = [values, length](auto counter, auto element)
+				{
+					const auto index = std::get<0>(counter);
+
+				};
+				const auto folding = fold(std::move(combine), std::make_tuple(0, true), std::move(prefix));
+				return std::get<1>(folding);
+			}
+
+			template <typename S, typename C>
+				requires BoundedSequence<S> and Callable<C, bool, T, sequence_type_t<S>>
+			constexpr bool has_prefix (C compare, S prefix) const;
+
+
+
+			
 
 	};
 
