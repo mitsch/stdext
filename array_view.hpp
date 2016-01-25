@@ -314,12 +314,16 @@ namespace stdext
 
 
 
-
-			constexpr std::tuple<array_view, array_view> split (std::size_t pos) const
+			/// Splits view into two parts of which the first part has a length of at most pos elements
+			/// and the second part is the complementary remainings of the original view
+			///
+			/// @param n  length of the first view
+			///
+			constexpr std::tuple<array_view, array_view> split (std::size_t n) const
 			{
-				const auto _pos = pos <= length ? pos : length;
-				const auto first = array_view(values, _pos);
-				const auto second = array_view(values + _pos, length - _pos);
+				const auto count = n <= length ? n : length;
+				const auto first = array_view(values, count);
+				const auto second = array_view(values + count, length - count);
 				return std::make_tuple(first, second);
 			}
 			
@@ -523,7 +527,90 @@ namespace stdext
 			/// @}
 
 
+
+			/// Takes some prefix of the view
+			///
+			/// @param count    Maximum amount of elements to consider; if the length is less, it will be
+			///                 clipped to this length
+			/// @param predict  Detects if an element is part of the prefix; traversion is front to back
+			/// @param value    Mutable variable for prediction
+			///
+			/// @{
+
+			/// The first \a count elements are considered to be prefix.
+			constexpr void take_prefix (std::size_t count)
+			{
+				*this = std::get<0>(split(count));
+			}
+
+			/// All elements which are positioned before the element for which \a predict returns false
+			/// the first time, are considered to be prefix.
+			constexpr void take_prefix (Callable<bool, T> predict)
+			{
+				*this = std::get<0>(split_prefix([predict=std::move(predict)](auto element)
+				{
+					return not predict(std::move(element));
+				}));
+			}
+
+			/// All elements which are positioned before the element for which \a predict returns false
+			/// the first time, are considered to be prefix. The last version of \a value is returned.
+			template <typename V> constexpr V take_prefix (Callable<std::tuple<V, bool>, V, T> predict, V value)
+			{
+				auto splitting = split([predict=std::move(predict)](auto value, auto element)
+				{
+					return not predict(std::move(value), std::move(element));
+				}, std::move(value));
+				*this = std::get<0>(splitting);
+				return std::get<3>(splitting);
+			}
+
+			/// @}
+
+
+
+
+			/// Takes some suffix of the view
+			///
+			/// @param count    Maximum amount of elements to consider; if the length is less, it will be
+			///                 clipped to this length
+			/// @param predict  Detects if an element is part of the suffix; traversion is back to front
+			/// @param value    Mutable variable for prediction
+			///
+			/// @{
+
+			/// The last \a count elements are considered to be suffix.
+			constexpr void take_suffix (const std::size_t count)
+			{
+				const auto secCount = count <= length ? count : length;
+				*this = std::get<1>(split(length - secCount));
+			}
+
+			/// All elements which are traversed before \a predic returns false the first time are
+			/// considered to belong to the suffix. Be aware that the direction of traversion is from
+			/// the back to the front.
+			constexpr void take_suffix (Callable<bool, T> predict)
+			{
+				*this = std::get<2>(split_suffix([predict=std::move(predict)](auto element)
+				{
+					return not predict(std::move(element));
+				}));
+			}
 			
+			/// All elements which are traversed before \a predic returns false the first time are
+			/// considered to belong to the suffix. Be aware that the direction of traversion is from
+			/// the back to the front. The last version of \a value is returned.
+			template <typename V> constexpr V take_suffix (Callable<std::tuple<V, bool>, V, T> predict, V value)
+			{
+				auto splitting = split_suffix([predict=std::move(predict)](auto value, auto element)
+				{
+					return not predict(std::move(value), std::move(element));
+				}, std::move(value));
+				*this = std::get<2>(splitting);
+				return std::get<3>(splitting);
+			}
+		
+			/// @}
 
 
 	};
