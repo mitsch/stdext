@@ -83,6 +83,16 @@ namespace stdext
 		       std::is_convertible<decltype(std::declval<S>()[std::size_t(0)]), T>::value;
 	}
 
+	template <typename S> concept bool Sequence ()
+	{
+		return BoundedSequence<S> or UnboundedSequence<S>;
+	}
+
+	template <typename S, typename T> concept bool Sequence ()
+	{
+		return BoundedSequence<S, T> or UnboundedSequence<S, T>;
+	}
+
 
 
 	template <typename S> struct sequence_type {};
@@ -146,6 +156,25 @@ namespace stdext
 			sequence = std::move(std::get<1>(concatenation));
 		}
 		return value;
+	}
+
+
+	
+	template <typename S>
+		requires BoundedSequence<S>
+	constexpr std::size_t length (S sequence)
+	{
+		return fold([](auto counter, auto value)
+		{
+			return counter + 1;
+		}, std::size_t(0), std::move(sequence));
+	}
+
+	template <typename S>
+		requires IndexedBoundedSequence<S>
+	constexpr std::size_t length (S sequence)
+	{
+		return s.length();
 	}
 
 }
