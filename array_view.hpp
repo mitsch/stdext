@@ -654,18 +654,17 @@ namespace stdext
 				requires BoundedSequence<S, T>
 			constexpr bool has_prefix (S prefix) const
 			{
-				auto combine = [values, length](auto counter, auto element)
-				{
-					const auto index = std::get<0>(counter);
-
-				};
-				const auto folding = fold(std::move(combine), std::make_tuple(0, true), std::move(prefix));
-				return std::get<1>(folding);
+				const auto prefixRemainer = std::get<2>(split_prefix(std::move(prefix)));
+				return prefixRemainer().empty();
 			}
 
 			template <typename S, typename C>
 				requires BoundedSequence<S> and Callable<C, bool, T, sequence_type_t<S>>
-			constexpr bool has_prefix (C compare, S prefix) const;
+			constexpr bool has_prefix (C compare, S prefix) const
+			{
+				const auto prefixRemainer = std::get<2>(split_prefix(std::move(compare), std::move(prefix)));
+				return prefixRemainer().empty();
+			}
 
 
 
