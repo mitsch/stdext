@@ -324,6 +324,22 @@ namespace stdext
 			}
 			
 
+			/// Splits view into some prefix and the remainings called stem
+			///
+			/// @param predict  Detects the delimiter to the prefix
+			/// @param value    Mutable value which is passed along the element traversion
+			/// @param exclude  Indicates the delimiter character as part of the stem
+			///
+			/// @return A tuple of views on prefix and stem or on prefix, delimiter and stem; both with
+			///         the resulting version of \a value, if some is given; all views partition the
+			///         original view in correct order
+			///
+			/// @{
+
+			/// The view is splitted into prefix, delimiter and stem. The delimiter has either one character,
+			/// if some character has been detected, or otherwise no character. The function object \a predict
+			/// takes an element and the current version of \a value and returns a tuple with a new version
+			/// of \a value and a boolean flag indicating if the most recent element is a delimiter.
 			template <typename C, typename V>
 				requires Callable<C, std::tuple<V, bool>, T, V>
 			constexpr std::tuple<array_view, array_view, array_view, V> split_prefix (C predict, V value) const
@@ -344,6 +360,11 @@ namespace stdext
 				return std::make_tuple(prefix, delimiter, stem, std::move(value));
 			}
 			
+			/// The view is splitted into prefix and stem. Whether the delimiter character is considered
+			/// part of the prefix or stem, is indicated by \a exclude (true = stem, false = suffix). The
+			/// function object takes an element and the current version of \a value and returns a tuple
+			/// with a new version of \a value and a boolean flag indicating if the most recent element
+			/// is a delimiter.
 			template <typename C, typename V>
 				requires Callable<C, std::tuple<V, bool>, T, V>
 			constexpr std::tuple<array_view, array_view, V> split_prefix (C predict, V value, bool exclude) const
@@ -356,7 +377,11 @@ namespace stdext
 				const auto stem = array_view(values + prefixLength, length - prefixLength);
 				return std::make_tuple(prefix, stem, std::move(value));
 			}
-			
+		
+			/// The view is splitted into prefix, delimiter and stem. The delimiter has either one
+			/// character, if some character has been detected as delimiter, or otherwise no character.
+			/// The function object \a predict takes an element and returns a boolean flag indicating if
+			/// the most recent element is a delimiter.
 			template <typename C>
 				requires Callable<C, bool, T>
 			constexpr std::tuple<array_view, array_view, array_view> split_prefix (C predict) const
@@ -374,6 +399,10 @@ namespace stdext
 				return std::make_tuple(prefix, delimiter, stem);
 			}
 
+			/// The view is splitted into prefix and stem. Whether the delimiter character is considered
+			/// part of the prefix or stem, is indicated by \a exclude (true = stem, false = suffix). The
+			/// function object takes an element and returns a boolean flag indicating if the most recent
+			/// element is a delimiter.
 			template <typename C>
 				requires Callable<C, bool, T>
 			constexpr std::tuple<array_view, array_view> split_prefix (C predict, bool exclude) const
@@ -387,6 +416,7 @@ namespace stdext
 				return std::make_tuple(prefix, stem);
 			}
 
+			/// @}
 
 
 			template <typename C, typename V>
