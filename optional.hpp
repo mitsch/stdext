@@ -213,10 +213,12 @@ namespace stdext
 		return optional<T>(std::move(t));
 	}
 
-	template <Callable_ C> constexpr auto make_optional (const bool initialise, C create)
+	template <typename C, typename ... Args>
+		requires Callable_<C, Args ...>
+	constexpr auto make_optional (const bool initialise, C create, Args ... args)
 	{
-		using type = decltype(create());
-		return initialise ? optional<type>(create()) : optional<type>();
+		using type = decltype(create(std::move(args) ...));
+		return initialise ? optional<type>(create(std::move(args) ...)) : optional<type>();
 	}
 
 
