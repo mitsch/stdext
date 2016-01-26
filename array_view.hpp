@@ -65,6 +65,10 @@ namespace stdext
 				swap(first.length, second.length);
 			}
 
+
+
+
+
 			constexpr optional<std::tuple<T, array_view>> operator () () const
 			{
 				return make_optional(length > 0, [&](){return std::make_tuple(*values, array_view(values+1, length-1));});
@@ -103,11 +107,78 @@ namespace stdext
 			}
 
 
+			template <typename C>
+				requires Callable_<C, array_view, array_view> and
+				is_optional<std::result_of_t<C(array_view, array_view)>>::value
+			constexpr auto traverse (C match) const
+			{
+				using type = std::result_of_t<C(array_view, array_view)>;
+				for (std::size_t index = 0; index < length; ++index)
+				{
+					const auto matching = match(array_view(values, index), array_view(values + index, length - index));
+					if (matching) return matching;
+				}
+				return type();
+			}
+			
+			template <typename C>
+				requires Callable_<C, array_view, array_view> and
+				is_optional<std::result_of_t<C(array_view, array_view)>>::value
+			constexpr auto traverse_reverse (C match) const
+			{
+				using type = std::result_of_t<C(array_view, array_view)>;
+				for (std::size_t index = 0; index < length; ++index)
+				{
+					const auto offset = length - index;
+					const auto matching = match(array_view(values, offset), array_view(values + offset, index));
+					if (matching) return matching;
+				}
+				return type();
+			}
 
 
+			template <typename V, Callable<V, V, array_view, array_view> C>
+			constexpr V fold_traverse (C combine, V value) const
+			{
+				for (std::size_t index = 0; index < length; ++index)
+					value = combine(std::move(value), array_view(values, index), array_view(values + index, length - index));
+				return value;
+			}
 
-			template <typename S>
-				requires Callable<
+			template <typename V, Callable<std::tuple<V, bool>, V, array_view, array_view> C>
+			constexpr V fold_traverse (C combine, V value) const
+			{
+				auto keepFolding = true;
+				for (std::size_t index = 0; keepFolding and index < length; ++index)
+					std::tie(value, keepFolding) =
+						combine(std::move(value), array_view(values, index), array_view(values + index, length - index));
+				return value;
+			}
+
+			template <typename V, Callable<V, V, array_view, array_view> C>
+			constexpr V fold_traverse_reverse (C combine, V value) const
+			{
+				for (std::size_t index = 0; index < length; ++index)
+				{
+					const auto offset = length - index;
+					value = combine(std::move(value), array_view(values, offset), array_view(values + offset, index));
+				}
+				return value;
+			}
+
+			template <typename V, Callable<std::tuple<V, bool>, V, array_view, array_view> C>
+			constexpr V fold_traverse_reverse (C combine, V value) const
+			{
+				auto keepFolding = true;
+				for (std::size_t index = 0; keepFolding and index < length; ++index)
+				{
+					const auto o = length - index;
+					std::tie(value, keepFolding) =
+						combine(std::move(value), array_view(values, offset), array_view(values + offset, index));
+				}
+				return value;
+			}
+
 
 
 
@@ -345,8 +416,7 @@ namespace stdext
 			/// if some character has been detected, or otherwise no character. The function object \a predict
 			/// takes an element and the current version of \a value and returns a tuple with a new version
 			/// of \a value and a boolean flag indicating if the most recent element is a delimiter.
-			template <typename C, typename V>
-				requires Callable<C, std::tuple<V, bool>, T, V>
+			template <typename V, Callable<std::tuple<V, bool>, T, V> C>
 			constexpr std::tuple<array_view, array_view, array_view, V> split_prefix (C predict, V value) const
 			{
 				auto foundSplit = false;
@@ -370,8 +440,7 @@ namespace stdext
 			/// function object takes an element and the current version of \a value and returns a tuple
 			/// with a new version of \a value and a boolean flag indicating if the most recent element
 			/// is a delimiter.
-			template <typename C, typename V>
-				requires Callable<C, std::tuple<V, bool>, T, V>
+			template <typename V, Callable<std::tuple<V, bool>, T, V> C>
 			constexpr std::tuple<array_view, array_view, V> split_prefix (C predict, V value, bool exclude) const
 			{
 				array_view hypPrefix;
@@ -387,8 +456,7 @@ namespace stdext
 			/// character, if some character has been detected as delimiter, or otherwise no character.
 			/// The function object \a predict takes an element and returns a boolean flag indicating if
 			/// the most recent element is a delimiter.
-			template <typename C>
-				requires Callable<C, bool, T>
+			template <Callable<bool, T> C>
 			constexpr std::tuple<array_view, array_view, array_view> split_prefix (C predict) const
 			{
 				auto foundSplit = true;
@@ -408,8 +476,7 @@ namespace stdext
 			/// part of the prefix or stem, is indicated by \a exclude (true = stem, false = prefix). The
 			/// function object takes an element and returns a boolean flag indicating if the most recent
 			/// element is a delimiter.
-			template <typename C>
-				requires Callable<C, bool, T>
+			template <Callable<bool, T> C>
 			constexpr std::tuple<array_view, array_view> split_prefix (C predict, bool exclude) const
 			{
 				array_view hypPrefix;
@@ -421,9 +488,9 @@ namespace stdext
 				return std::make_tuple(prefix, stem);
 			}
 
-			template <typename S>
-				requires Sequence<S, T>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
+			/// The view is splitted into matching prefix, remainings of the view and remainings of the
+			/// \a sequence. The matching prefix will have maximum length.
+			template <Sequence<T> S> constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
 			{
 				auto combine = [values, length](auto index, auto element)
 				{
@@ -437,8 +504,10 @@ namespace stdext
 				return std::make_tuple(prefix, stem, std::move(postSequence));
 			}
 
-			template <typename S, typename C>
-				requires Sequence<S> and Callable<C, bool, T, sequence_type_t<S>>
+			/// The view is splitted into matching prefix, remainings of the view and remainings of the
+			/// \a sequence. The respective elements of the view and the sequence are tested on equality
+			/// with \a compare. The matching prefix will have maximum length.
+			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
 			constexpr std::tuple<array_view, array_view, S> split_prefix (C compare, S sequence) const
 			{
 				auto combine = [compare=std::move(compare), values, length](auto index, auto element)
@@ -556,6 +625,40 @@ namespace stdext
 				return std::make_tuple(stem, suffix);
 			}
 
+			template <Sequence<T> S> constexpr std::tuple<array_view, array_view, S> split_suffix_reverse (S sequence) const
+			{
+				auto combine = [values](auto index, auto element)
+				{
+					const auto keepTesting = index > 0 and values[index - 1] == element;
+					return std::make_tuple(keepTesting, index - (keepTesting ? 1 : 0));
+				};
+				const auto n = fold(std::move(combine), length, sequence);
+				const auto stem = array_view(values, n);
+				const auto suffix = array_view(values + n, length - n);
+				auto postSequence = drop_strictly(n, std::move(sequence));
+				return std::make_tuple(stem, suffix, std::move(postSequence));
+			}
+
+			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
+			constexpr std::tuple<array_view, array_view, S> split_suffix_reverse (C compare, S sequence) const
+			{
+				auto combine = [compare=std::move(compare), values](auto index, auto element)
+				{
+					const auto keepTesting = index > 0 and compare(values[index - 1], element);
+					return std::make_tuple(keepTesting, index - (keepTesting ? 1 : 0));
+				};
+				const auto n = fold(std::move(combine), length, sequence);
+				const auto stem = array_view(values, n);
+				const auto suffix = array_view(values + n, length - n);
+				auto postSequence = drop_strictly(n, std::move(sequence));
+				return std::make_tuple(stem, suffix, std::move(postSequence));
+			}
+
+			template <Sequence<T> S> constexpr std::tuple<array_view, array_view, S> split_suffix (S sequence) const
+			{
+				auto combine = [sequence=std::move(sequence)](auto ){};
+			}
+
 			/// @}
 
 
@@ -595,6 +698,25 @@ namespace stdext
 				}, std::move(value));
 				*this = std::get<0>(splitting);
 				return std::get<3>(splitting);
+			}
+
+			/// Matching prefix with maximal length between own view and \a sequence is taken. The
+			/// remaining sequence is returned.
+			template <Sequence<T> S> constexpr S take_prefix (S sequence)
+			{
+				auto splitting = split_prefix(std::move(sequence));
+				*this = std::get<0>(splitting);
+				return std::get<2>(splitting);
+			}
+
+			/// Matching prefix with maximal length between own view and \a sequence is taken. The
+			/// respective elements of the view and the sequence are tested with \a compare on equality.
+			/// The remaining sequence is returned.
+			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C> constexpr S take_prefix (C compare, S sequence)
+			{
+				auto splitting = split_prefix(std::move(compare), std::move(sequence));
+				*this = std::get<0>(splitting);
+				return std::get<2>(splitting);
 			}
 
 			/// @}
