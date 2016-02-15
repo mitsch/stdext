@@ -52,6 +52,9 @@ namespace stdext
 	template <typename T> struct negate : bool_constant<not T::value> {};
 	template <typename T> auto negate_v = negate<T>::value;
 
+
+	template <std::size_t N> using index_constant = integral_constant<std::size_t, N>;
+
 }
 
 #endif
