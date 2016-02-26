@@ -29,12 +29,146 @@ namespace stdext
 			T * values;
 			std::size_t length;
 
+
+			/// Insertion sorts elements from index \a begin to \a end
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void insertion_sort (C comparer, std::size_t begin, std::size_t end)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+
+				using std::swap;
+
+				for (auto nextToSort = begin + 1; nextToSort < end; ++nextToSort)
+				{
+					auto index = nextToSort;
+					while (index > begin and comparer(values[index], values[index-1]))
+					{
+						swap(values[index], values[index-1]);
+						--index;
+					}
+				}
+			}
+
+			/// Get median index of three values at indices \a a, \a b and \a c
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::size_t index get_median_index (C comparer, std::size_t a, std::size_t b, std::size_t c) const
+			{
+				assert(a < length);
+				assert(b < length);
+				assert(c < length);
+
+				const auto ab = comparer(values[a], values[b]);
+				const auto bc = comparer(values[b], values[c]);
+				const auto ac = comparer(values[a], values[c]);
+
+				if ((ab and bc) or (not ab and not ac and not bc)) return b;
+				else if ((ab and not bc and not ac) or (not ab and ac)) return a;
+				else return c;
+			}
+
+
+			/// Partitions with pivot taken randomly from the values
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::size_t randomly_partition (C comparer, std::size_t begin, std::size_t end)
+			{
+				assert(begin + 3 < end);
+				assert(end <= length);
+
+				using std::swap;
+
+				const auto middle = begin + (end - begin) / 2;
+				const auto median = get_median_index(comparer, begin, middle, end-1);
+				if (median != end-1) swap(values[median], values[end-1]);
+
+				const T& pivot = values[end-1];	
+				const auto bound = partition([&pivot, &comparer](const auto & element)
+				{
+					return comparer(element, pivot);
+				}, begin, end-1);
+
+				return bound;
+			}
+
+
+			/// Partitions with predictor from \a begin to \a end
+			template <Callable<bool, const T&> C>
+			constexpr std::size_t partition (C predictor, std::size_t begin, std::size_t end)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+
+				using std::swap;
+
+				while (true)
+				{
+					while (predictor(values[first])) ++first;
+					--end;
+					while (not predictor(values[end]) --end;
+
+					if (first == end) return first;
+					swap(values[first], values[end]);
+					++begin;
+				}
+			}
+
+			/// Builds heap with \a comparer from \a begin to \a end
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void build_heap (C comparer, std::size_t begin, std::size_t end)
+			{
+				assert(begin < end);
+				assert(end <= length);
+
+				using std::swap;
+				const auto firstLeaf = ((end - begin) / 2) + 2 + begin;
+				for (auto parent = firstLeaf; parent > begin; --parent)
+					heapify(comparer, begin, end, parent-1);
+			}
+
+			/// Heapifies down
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void heapify (C comparer, std::size_t begin, std::size_t end, std::size_t parent)
+			{
+				assert(begin < end);
+				assert(end <= length);
+				assert(begin <= parent);
+				assert(parent <= end);
+
+				while (parent < end)
+				{
+					const auto left = parent * 2 + 1;
+					const auto right = left + 1;
+					
+					if (left < end)
+					{
+						const auto bestChild = (right >= end or comparer(values[left], values[right])) ? left : right;
+						if (comparer(values[bestChild], values[parent]))
+						{
+							swap(values[bestChild], values[parent]);
+							parent = bestChild);
+						}
+					}
+					else break;
+				}
+			}
+
+
+			/// Introselection
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void intro_select (C comparer, std::size_t index, std::size_t depth)
+			{
+				
+			}
+
 		public:
 
-			/// underlying type of the array view
+			/// Underlying type of the array view
 			using value_type = T;
 
 
+
+
+			// ------------------------------------------------------------------------------------------
 
 			/// Default constructor
 			///
@@ -258,6 +392,33 @@ namespace stdext
 				{
 					const auto offset = length - index;
 					const auto matching = match(array_view(values, offset), array_view(values + offset, index));
+					if (matching) return matching;
+				}
+				return type();
+			}
+
+			template <Callable_<array_view, array_view> C>
+				requires is_optional<std::result_of_t<C(array_view, array_view)>>::value
+			constexpr void traverse (C matcher)
+			{
+				using type = std::result_of_t<C(array_view, array_view)>;
+				for (std::size_t index = 0; index < length; ++index)
+				{
+					const auto matching = matcher(array_view(values, index), array_view(values + index, length - index));
+					if (matching) return matching;
+				}
+				return type();
+			}
+			
+			template <Callable_<array_view, array_view> C>
+				requires is_optional<std::result_of_t<C(array_view, array_view)>>::value
+			constexpr void traverse_reverse (C matcher)
+			{
+				using type = std::result_of_t<C(array_view, array_view)>;
+				for (std::size_t index = 0; index < length; ++index)
+				{
+					cosnt auto offset = length - index;
+					const auto matching = matcher(array_view(values, offset), array_view(values + offset, index));
 					if (matching) return matching;
 				}
 				return type();
@@ -985,13 +1146,22 @@ namespace stdext
 
 
 
-
-
-			/// Shrinkage
+			/// Takes prefix from the view
 			///
-			///	The view can be shrinked from the front or from the back. 
+			///	Depending on the criterium, as many elements as possible are taken from the beginning of
+			/// the view. The view itself will be shrinked to this prefix. Either at most \a count
+			/// elements are taken, or the longest prefix for which \a predict returns true will be taken
+			/// or the longest shared prefix of the view and \a sequence is taken. For latter, the
+			/// tailing sequence will be returned and it can be customised with \a matcher. For
+			/// prediction and pattern sequence, the view will be traversed forward from its beginning.
+			///
+			/// @param count      Maximum amount of elements to take
+			/// @param predictor  Predicts if the element belongs to the prefix
+			/// @param elements   Pattern sequence whose prefix will be matched
+			/// @param matcher    Customable matcher function
 			///
 			/// @{
+			///
 
 			constexpr void take_prefix (std::size_t count)
 			{
@@ -1004,14 +1174,6 @@ namespace stdext
 			{
 				const auto splitting = split_prefix(std::move(predictor));
 				return std::get<0>(splitting);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool>, V, T> C>
-			constexpr V take_prefix (C predictor, V value)
-			{
-				const auto splitting = split(std::move(predictor), std::move(value));
-				*this = std::get<0>(splitting);
-				return std::get<3>(splitting);
 			}
 
 			template <Sequence<T> S>
@@ -1030,6 +1192,27 @@ namespace stdext
 				return std::get<2>(splitting);
 			}
 
+			/// @}
+
+
+
+			/// Takes suffix from the view
+			///
+			/// Depending on the criterium, as many elements as possible are taken from the ending of the
+			/// view. The view itself will be shrinked to this suffix. Either at most \a count elements
+			/// will be taken, or the longest suffix of elements for which \a predictor returns true will
+			/// be taken or the longest share between the suffix of the view and the prefix of \a
+			/// elements is taken. For latter, the tailing sequence will be returned and matching can be
+			/// customised with \a matcher.
+			///
+			/// @param count      Maximum amount of elements to consider as suffix
+			/// @param predictor  Predicts if an element belongs to the suffix
+			/// @param elements   Pattern sequence whose prefix will be matched with the suffix
+			/// @param matcher    Customisable matching function
+			///
+			/// @{
+			///
+
 			constexpr void take_suffix (std::size_t count)
 			{
 				const auto boundedCount = count <= length ? count : length;
@@ -1042,21 +1225,6 @@ namespace stdext
 			{
 				const auto splitting = split_suffix(std::move(predictor));
 				*this = std::get<2>(splitting);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool, V, T> C>
-			constexpr void take_suffix (C predictor, V value)
-			{
-				const auto splitting = split_suffix(std::move(predictor), std::move(value));
-				*this = std::get<2>(splitting);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool>, V, T> C>
-			constexpr V take_suffix (C predictor, V value)
-			{
-				const auto splitting = split_suffix(std::move(predictor), std::move(value));
-				*this = std::get<2>(splitting);
-				return std::get<3>(splitting);
 			}
 
 			template <Sequence<T> S>
@@ -1075,6 +1243,23 @@ namespace stdext
 				return std::get<2>(splitting);
 			}
 
+			/// @}
+
+
+
+			/// Drops the prefix from the view
+			///
+			/// Depending on the criterium, as many values as possible will be dropped from the beginning
+			/// of the view. This view will be shrinked to the remaining suffix.
+			///
+			/// @param count
+			/// @param predictor
+			/// @param elements
+			/// @param matcher
+			///
+			/// @{
+			///
+
 			constexpr void drop_prefix (std::size_t count)
 			{
 				const auto splitting = split(count);
@@ -1087,14 +1272,6 @@ namespace stdext
 				const auto splitting = split_prefix(std::move(predictor));
 				*this std::get<1>(splitting);
 			}			
-
-			template <typename V, Callable<std::tuple<V, bool>, V, T> C>
-			constexpr V drop_prefix (C predictor, V value)
-			{
-				const auto splitting = split(std::move(predictor), std::move(value));
-				*this = std::get<1>(splitting);
-				return std::get<3>(splitting);
-			}
 
 			template <Sequence<T> S>
 			constexpr S drop_prefix (S elements)
@@ -1111,6 +1288,16 @@ namespace stdext
 				*this = std::get<1>(splitting);
 				return std::get<2>(splitting);
 			}
+
+
+
+			/// Tries to drop a prefix from the view
+			///
+			/// If the criterium is fulfilled, the prefix will be dropped. If the criterium is not
+			/// fulfilled, the view will not be changed. The success of the criterium will be returned.
+			///
+			/// @{
+			///
 
 			constexpr bool drop_prefix_if (std::size_t count)
 			{
@@ -1139,6 +1326,18 @@ namespace stdext
 				return isMatchingAll;
 			}
 
+			/// @}
+
+
+			/// Shrinkage
+			///
+			///	The view can be shrinked from the front or from the back. 
+			///
+			/// @{
+
+
+
+
 			constexpr void drop_suffix (std::size_t count)
 			{
 				const auto boundedCount = count <= length ? count : length;
@@ -1151,21 +1350,6 @@ namespace stdext
 			{
 				const auto splitting = split_suffix(std::move(predictor));
 				*this = std::get<0>(splitting);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool, V, T> C>
-			constexpr void drop_suffix (C predictor, V value)
-			{
-				const auto splitting = split_suffix(std::move(predictor), std::move(value));
-				*this = std::get<0>(splitting);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool>, V, T> C>
-			constexpr V drop_suffix (C predictor, V value)
-			{
-				const auto splitting = split_suffix(std::move(predictor), std::move(value));
-				*this = std::get<0>(splitting);
-				return std::get<3>(splitting);
 			}
 
 			template <Sequence<T> S>
@@ -1217,16 +1401,39 @@ namespace stdext
 			/// @}			
 
 
-			// TODO some standard algorithms like rotate, reverse, sort, partition, etc.
-			constexpr void rotate (std:size_t count)
+
+			/// Rotates values \a count times to the right
+			///
+			/// The values in the view will be rotated by \a count shifts to the right. The rotation will
+			/// be performed in place.
+			///
+			/// @note Time complexity is linear with the length of the view.
+			/// @note Space complexity is constant.
+			///
+			constexpr void rotate (std::size_t count)
 			{
-				if (length > 1)
+				if (length > 1 and (count % length) > 0)
 				{
 					count %= length;
-					std::rotate(values, values + count, values + length);
+					auto next = count;
+					auto first = 0;
+					while (next != first)
+					{
+						swap(values[first], values[next]);
+						++first;
+						++next;
+						if (next == length) next = count;
+						else if (first == count) count = next;
+					}
 				}
 			}
 
+			/// Reverses values in place
+			///
+			/// The values in the view will be reversed. The revertion will be performed in place.
+			///
+			/// @note Time complexity is linear with the length of the view.
+			///
 			constexpr void reverse ()
 			{
 				const auto count = length / 2;
@@ -1236,76 +1443,209 @@ namespace stdext
 					swap(values[index], values[index + offset]);
 			}
 
-			/// Partition
+
+			/// Partitions stabely
+			template <Callable<bool, const T&> C>
+			constexpr std::tuple<array_view, array_view> partition_stabely (C predictor)
+			{
+				// skip any positive prefix
+				std::size_t begin = 0
+				while (begin < length and predictor(values[begin]))
+					++begin;
+
+				// scan the next negative part
+				auto negative = begin == length ? length : (begin + 1);
+				while (negative < length and not predictor(values[negative]))
+					--negative;
+
+				while (negative < length)
+				{
+					// negative is less length and predictor(value[negative]) returns true, so we don't have
+					// to ask it again
+					auto positive = negative + 1;
+					while (positive < length and predictor(values[positive]))
+						++positive;
+
+					/// rotate the window, so partitions are in right order
+					array_view(values + begin, positive + negative - begin).rotate(positive);
+
+					// skip the now positive part
+					begin = begin + (positive - negative);
+
+					// end of negative part is where end of positive part has been
+					negative = positive;
+				}
+			}
+
+
+			/// Partitions unstabely
 			///
 			/// All values in the array are partitioned into a group of values for which \a predictor
 			/// returns true and a group of values for which \a predictor returns false. The values are
 			/// rearranged in place. The views on the two partitions are returned. Type \a T must be 
 			/// move nothrow constructible and move nothrow assignable.
 			///
-			/// @{
-
+			/// @note Time complexity is linear in the length of the view.
+			///
 			template <Callable<bool, const T&> C>
 				requires not std::is_const<T>::value and
 				         std::is_nothrow_move_constructible<T>::value and
 				         std::is_nothrow_move_assignable<T>::value
 			constexpr std::tuple<array_view, array_view> partition (C predictor)
 			{
-				using std::swap;
-				std::size_t lower = 0;
-				std::size_t upper = length - (length > 0 ? 1 : 0);
-				while (lower < upper)
+				if (length > 0)
 				{
-					while (predictor(values[lower]))
-					{
-						++lower;
-						if (lower == upper)
-						{
-							auto pre = array_view(values, lower);
-							auto post = array_view(values + lower, length - lower);
-							return std::make_tuple(pre, post);
-						}
-					}
-					do
-					{
-						--upper;
-						if (lower == upper)
-						{
-							auto pre = array_view(values, lower);
-							auto post = array_view(values + lower, length - lower);
-							return std::make_tuple(pre, post);
-						}
-					}
-					while(not predictor(values[upper]));
-					swap(values[lower], values[upper]);
-					lower++;
+					const auto bound = partition(std::move(predictor), 0, length);
+					return std::make_tuple(array_view(values, bound), array_view(values + bound, length - bound));
 				}
-				auto pre = array_view(values, lower);
-				auto post = array_view(values + lower, length - lower);
-				return std::make_tuple(pre, post);
+				else
+				{
+					return std::make_tuple(array_view(), array_view());
+				}
 			}
 
-			template <Callable<bool, const T&> C>
-				requires std::is_copy_assignable<T>::value
-			constexpr std::tuple<array_view, array_view> partition (C predictor, array_view<std::remove_const<T>::type> destination) const
+			/// Partitions with pivot taken randomly from its values
+			///
+			/// The values will be rearranged into two parts. Each element in the first part will be in
+			/// right order compared with each element in the second part. The order is defined by \a
+			/// comparer, which defines a strict weak order on the values. Both views will be
+			/// individually smaller than the original view. The views will be a concatenation of the
+			/// original view. If the original is empty, so will be both resulting views.
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
 			{
-				if (destination.length() >= length)
+				if (length > 3)
 				{
-					destination.take_prefix(length);
-					const auto indices = destination.assign([predictor=std::move(predictor), length, values](auto indices)
-					{
-						auto index = std::get<0>(indices);
-						auto middle = std::get<1>(indices);
-						auto target = std::get<2>(indices);
-
-						while (index < length and predictor(values[index] != target)
-							++index;
-
-						if (index < length)
-							
-					}, std::make_tuple(std::size_t(0), std::size_t(0), true));
+					const auto bound = random_partition(std::move(comparer), 0, length);
+					auto positives = array_view(values, bound);
+					auto negatives = array_view(values + bound, length - bound);
+					return std::make_tuple(positives, negatives);
+				}
+				else if (length == 3)
+				{
+					
 				}
 			}
+
+			///	Partitions into prefix and suffix of sorting values
+			///
+			/// The values will be rearranged into two parts. The first part will contain all values
+			/// which belong to the top \a count values when sorted with \a comparer. The second part
+			/// will contain all remaining values. These are the bottom \a length - \a count values when
+			/// sorted with \a comparer. The returning views will be contiguous and will span the
+			/// original view.
+			template <Callable<bool, const T&, cosnt T&> C>
+			constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t prefixCount)
+			{
+				if (prefixCount > length) prefixCount = length;
+
+				if (prefixCount == length)
+				{
+					return std::make_tuple(*this, array_view());
+				}
+				else if (prefixCount == 0)
+				{
+					return std::make_tuple(array_view(), *this);
+				}
+				else if (prefixCount * 2 > length)
+				{
+					auto rev_comparer = [&](const auto & a, const auto & b){return comparer(b, a);};
+					build_heap(rev_comparer, 0, prefixCount);
+					for (auto index = prefixCount; index < length; ++index)
+					{
+						if (comparer(values[index], values[0]))
+						{
+							swap(values[index], index[0]);
+							heapify(rev_comparer, 0, prefixCount, 0);
+						}
+					}
+					const auto suffixCount = length - prefixCount;
+					return std::make_tuple(array_view(values, prefixCount), array_view(values + prefixCount, suffixCount));
+				}
+				else
+				{
+					build_heap(comparer, prefixCount, length);
+					for (auto index = prefixCount; index > 0; --index)
+					{
+						if (comparer(values[prefixCount], values[index-1]))
+						{
+							swap(values[index-1], values[prefixCount]);
+							heapify(comparer, prefixCount, end, prefixCount);
+						}
+					}
+					const auto suffixCount = length - prefixCount;
+					return std::make_tuple(array_view(values, prefixCount), array_view(values + prefixCount, suffixCount));
+				}
+			}
+
+			/// Sort prefix
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> sort_prefix (C comparer, std::size_t count)
+			{}
+
+			/// Sort suffix
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> sort_suffix (C comparer, std::size_t count)
+			{}
+
+			/// Sort nth element
+			template <Callable<bool, const T&, const T&> C>
+			constexpr optional<std::tuple<array_view, const T&, array_view>> sort_nth (C comparer, const std::size_t n)
+			{
+				return make_optional(n < length, [&]()
+				{
+					using std::swap;
+
+					auto depth = 2 * __builtin_clz(n);
+					auto begin = 0;
+					auto end = length;
+
+					while ((end - begin) > 3)
+					{
+						if (depth == 0)
+						{
+							build_heap(comparer, n, end);
+							auto index = n;
+							while (index > begin)
+							{
+								--index;
+								if (comparer(values[n], values[index]))
+								{
+									swap(values[n], values[index]);
+									heapify(comparer, n, end, n);
+								}
+							}
+							break;
+						}
+						else
+						{
+							--depth;
+							const auto cut = partition_randomly(comparer, begin, end);
+							if (cut <= n) first = cut;
+							else          end = cut;
+						}
+					}
+
+					if ((end - begin) <= 3)
+						insertion_sort(comparer, begin end);
+					
+					auto pre = array_view(values, n);
+					auto post = array_view(values + n + 1, length - n - 1);
+					return std::make_tuple(pre, values[n], post);
+				});
+			}
+
+			/// Sort unstabely all values
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void sort (C comparer)
+			{}
+
+			/// Sort stabely all values
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void sort_stabely (C comparer)
+			{}
+
+
 	};
 
 }

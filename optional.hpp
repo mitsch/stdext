@@ -232,7 +232,7 @@ namespace stdext
 			template <typename C, typename ... As>
 				requires Callable_<C, T, As ...> and
 				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			constexpr auto bind (C mapper, As ... arguments) const
+			constexpr auto mbind (C mapper, As ... arguments) const
 			{
 				using U = std::result_of_t<C(T, As ...)>;
 				return initialised ? mapper(value, std::move(arguments) ...) : U();
@@ -241,7 +241,7 @@ namespace stdext
 			template <typename C, typename ... As>
 				requires Callable_<C, T, As ...> and
 				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			friend constexpr auto bind (C mapper, optional && value, As ... arguments) const
+			friend constexpr auto mbind (C mapper, optional && value, As ... arguments) const
 			{
 				using U = std::result_of_t<C(T, As ...)>;
 				const auto initialised = value.initialised;
@@ -252,13 +252,18 @@ namespace stdext
 			template <typename C, typename ... As>
 				requires Callable_<C, T, As ...> and
 				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			friend constexpr auto bind (C mapper, const optional & value, As ... arguments) const
+			friend constexpr auto mbind (C mapper, const optional & value, As ... arguments) const
 			{
 				using U = std::result_of_t<C(T, As ...)>;
 				return value.initialised ? mapper(value, std::move(arguments) ...) : U();
 			}
 
 
+
+			friend constexpr optional mflatten (optional<optional> value)
+			{
+				return mbind([](auto v){return v;}, std::move(value));
+			}
 
 
 

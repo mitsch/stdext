@@ -12,9 +12,17 @@ A sequence is a definition of values with a specified order. The definition can 
 * not directly accessible and finite sequences
 * directly accessible and infinite sequences
 * not directly accessible and infinite sequences
+These kind of sequences are modeled as concepts in C++. It allows static type and syntax checking as well simpler integration of foreign types.
+| concept name | directly accessible | finite |
+| :----------- | ------------------- | ------ |
+| BoundedSequence |   no             |   yes  |
+| IndexedBoundedSequence |  yes      |   yes  |
+| UnboundedSequence |     no         |   no   |
+| IndexedUnboundedSequence | yes     |   no   |
 
-
-
-
+All types of sequences have to provide following characteristics:
+* Decomposition without changing its state
+* Copy constructible without throwing any exception
+* Copy assignable without throwing any exception
 
 
