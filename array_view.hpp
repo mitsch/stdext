@@ -1250,12 +1250,16 @@ namespace stdext
 			/// Drops the prefix from the view
 			///
 			/// Depending on the criterium, as many values as possible will be dropped from the beginning
-			/// of the view. This view will be shrinked to the remaining suffix.
+			/// of the view. This view will be shrinked to the remaining suffix. Either a prefix with at
+			/// most \a count values will be dropped, or the longest prefix of values for which \a
+			/// predictor returns true is dropped, or the longest share between the prefix of the view
+			/// and the prefix of the \a elements is dropped. For latter, the tailing sequence will be
+			/// returned and matching can be customised with \a matcher.
 			///
-			/// @param count
-			/// @param predictor
-			/// @param elements
-			/// @param matcher
+			/// @param count      Maximum amount of elements to consider as prefix
+			/// @param predictor  Predicts if an element belongs to the prefix
+			/// @param elements   Pattern sequence whose prefix will be matched with the prefix
+			/// @param matcher    Customisable matching function
 			///
 			/// @{
 			///
@@ -1288,6 +1292,8 @@ namespace stdext
 				*this = std::get<1>(splitting);
 				return std::get<2>(splitting);
 			}
+			
+			/// @}
 
 
 
@@ -1295,6 +1301,12 @@ namespace stdext
 			///
 			/// If the criterium is fulfilled, the prefix will be dropped. If the criterium is not
 			/// fulfilled, the view will not be changed. The success of the criterium will be returned.
+			/// Either a prefix of exactly \a count values, or a prefix which completely matches \a
+			/// elements will be dropped. Matching can be customised with \a matcher.
+			///
+			/// @param count      Amount of values to be dropped
+			/// @param elemenets  Bounded pattern sequence which should match the dropped prefix
+			/// @param matcher    Customisable matching function
 			///
 			/// @{
 			///
@@ -1329,15 +1341,24 @@ namespace stdext
 			/// @}
 
 
-			/// Shrinkage
+
+			/// Drops the suffix from the view
 			///
-			///	The view can be shrinked from the front or from the back. 
+			/// Depending on the criterium, as many values as possible will be dropped from the ending of
+			/// the view. This view will be shrinked to the remaining prefix. Either a suffix with at
+			/// most \a count values will be dropped, or the longest suffix of values for which \a
+			/// predictor returns true is dropped, or the longest share between the suffix of the view
+			/// and the prefix of the \a elements is dropped. For latter, the tailing sequence will be
+			/// returned and matching can be customised with \a matcher.
+			///
+			/// @param count      Maximum amount of elements to consider as suffix
+			/// @param predictor  Predicts if an element belongs to the suffix
+			/// @param elements   Pattern sequence whose prefix will be matched with the suffix
+			/// @param matcher    Customisable matching function
 			///
 			/// @{
-
-
-
-
+			///
+			
 			constexpr void drop_suffix (std::size_t count)
 			{
 				const auto boundedCount = count <= length ? count : length;
@@ -1366,8 +1387,25 @@ namespace stdext
 				const auto splitting = split_suffix(std::move(matcher), std::move(elements));
 				*this = std::get<0>(splitting);
 				return std::get<2>(splitting);
-			}
+			}			
+			
+			/// @}
 
+
+			/// Tries to drop a suffix from the view
+			///
+			/// If the criterium is fulfilled, the suffix will be dropped. If the criterium is not
+			/// fulfilled, the view will not be changed. The success of the criterium will be returned.
+			/// Either a suffix of exactly \a count values, or a suffix which completely matches \a
+			/// elements will be dropped. Matching can be customised with \a matcher.
+			///
+			/// @param count      Amount of values to be dropped
+			/// @param elemenets  Bounded pattern sequence which should match the dropped suffix
+			/// @param matcher    Customisable matching function
+			///
+			/// @{
+			///
+			
 			constexpr bool drop_suffix_if (std::size_t count)
 			{
 				if (count <= length)
@@ -1397,8 +1435,8 @@ namespace stdext
 					*this = std::get<0>(splitting);
 				return isMatchingAll;
 			}
-
-			/// @}			
+			
+			/// @}
 
 
 
@@ -1445,9 +1483,27 @@ namespace stdext
 
 
 			/// Partitions stabely
+			///
+			/// All values will be rearranged into two contiguous parts which span the whole view. The
+			/// first part will contain elements which are conform with the \a predictor. The second part
+			/// will contain elements which are not conform with the \a predictor. Within each part,
+			/// every two values will have the same order as before.
+			///
+			/// @param predictor  A callable object which takes a constant reference to some value and
+			///                   returns a boolean indicating whether the value is conform with the
+			///                   predicate or not.
+			///
+			/// @note Time complexity is linear with the length of the view.
+			///
 			template <Callable<bool, const T&> C>
 			constexpr std::tuple<array_view, array_view> partition_stabely (C predictor)
 			{
+				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+				static_assert(not std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be at least nothrow copy assignable!");
+				static_assert(not std::is_nothrow_copy_constructible<T>::value,
+				"Value of array_view must be at least nothrow copy constructible!");
+			
 				// skip any positive prefix
 				std::size_t begin = 0
 				while (begin < length and predictor(values[begin]))
@@ -1475,24 +1531,35 @@ namespace stdext
 					// end of negative part is where end of positive part has been
 					negative = positive;
 				}
+				
+				auto pre = array_view(values, begin);
+				auto post = array_view(values + begin, length - begin);
+				return std::make_tuple(pre, post);
 			}
 
 
 			/// Partitions unstabely
 			///
-			/// All values in the array are partitioned into a group of values for which \a predictor
-			/// returns true and a group of values for which \a predictor returns false. The values are
-			/// rearranged in place. The views on the two partitions are returned. Type \a T must be 
-			/// move nothrow constructible and move nothrow assignable.
+			/// All values will be rearranged into two contiguous parts which span the whole view. The
+			/// first part will contain elements which are conform with the \a predictor. The second part
+			/// will contain elements which are not conform with the \a predictor. It is not guarantied
+			/// that two values in the same part will keep their original order.
+			///
+			/// @param predictor  A callable object which takes a constant reference to some value and
+			///                   returns a boolean indicating whether the value is conform with the
+			///                   predicate or not.			
 			///
 			/// @note Time complexity is linear in the length of the view.
 			///
 			template <Callable<bool, const T&> C>
-				requires not std::is_const<T>::value and
-				         std::is_nothrow_move_constructible<T>::value and
-				         std::is_nothrow_move_assignable<T>::value
 			constexpr std::tuple<array_view, array_view> partition (C predictor)
 			{
+				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Value of array_view must be at least nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be at least nothrow copy assignable!");
+				
 				if (length > 0)
 				{
 					const auto bound = partition(std::move(predictor), 0, length);
@@ -1510,10 +1577,20 @@ namespace stdext
 			/// right order compared with each element in the second part. The order is defined by \a
 			/// comparer, which defines a strict weak order on the values. Both views will be
 			/// individually smaller than the original view. The views will be a concatenation of the
-			/// original view. If the original is empty, so will be both resulting views.
+			/// original view. If the original is empty, so will be both resulting views. Values will not
+			/// hold their original order.
+			///
+			/// @param comparer  A callable object which takes two constant references to some value of
+			///                  type \a T and returns a boolean indicating whether the two values are in
+			///                  the right order.
+			///
+			/// @note Time complexity is linear in the length of the view.
+			///
 			template <Callable<bool, const T&, const T&> C>
 			constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
 			{
+				static_assert(not std::is_const<T>::value, "");
+			
 				if (length > 3)
 				{
 					const auto bound = random_partition(std::move(comparer), 0, length);
@@ -1636,15 +1713,19 @@ namespace stdext
 			}
 
 			/// Sort unstabely all values
+			///
+			/// All values will be sorted according to \a comparer. The order of \a comparer must be a
+			/// strict weak one.
 			template <Callable<bool, const T&, const T&> C>
 			constexpr void sort (C comparer)
-			{}
+			{
+				
+			}
 
 			/// Sort stabely all values
 			template <Callable<bool, const T&, const T&> C>
 			constexpr void sort_stabely (C comparer)
 			{}
-
 
 	};
 
