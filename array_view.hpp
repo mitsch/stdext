@@ -50,6 +50,42 @@ namespace stdext
 				}
 			}
 
+			/// Reverts values from \a begin to \a end
+			constexpr void reverse (std::size_t begin, std::size_t end)
+			{
+				using std::swap;
+				--end;
+				while (begin < end)
+				{	
+					swap(values[begin], values[end]);
+					++begin;
+					--end;
+				}
+			}
+
+			/// Rotates values from \a begin to \a end \a count times
+			constexpr void rotate (std::size_t begin, std::size_t end, std::size_t middle)
+			{
+				assert(begin <= middle);
+				assert(middle <= end);
+				assert(end <= length);
+
+				const auto _length = end - begin;
+				const auto count  = middle - begin;
+				if ((end - begin) > 1 and middle > begin and end > middle)
+				{
+					auto next = middle;
+					while (next != begin)
+					{
+						swap(values[begin], values[next]);
+						++begin;
+						++next;
+						if (next == end) next = middle;
+						else if (begin == middle) middle = next;
+					}
+				}
+			}
+
 			/// Get median index of three values at indices \a a, \a b and \a c
 			template <Callable<bool, const T&, const T&> C>
 			constexpr std::size_t index get_median_index (C comparer, std::size_t a, std::size_t b, std::size_t c) const
@@ -65,51 +101,6 @@ namespace stdext
 				if ((ab and bc) or (not ab and not ac and not bc)) return b;
 				else if ((ab and not bc and not ac) or (not ab and ac)) return a;
 				else return c;
-			}
-
-
-			/// Partitions with pivot taken randomly from the values
-			template <Callable<bool, const T&, const T&> C>
-			constexpr std::size_t randomly_partition (C comparer, std::size_t begin, std::size_t end)
-			{
-				assert(begin + 3 < end);
-				assert(end <= length);
-
-				using std::swap;
-
-				const auto middle = begin + (end - begin) / 2;
-				const auto median = get_median_index(comparer, begin, middle, end-1);
-				if (median != end-1) swap(values[median], values[end-1]);
-
-				const T& pivot = values[end-1];	
-				const auto bound = partition([&pivot, &comparer](const auto & element)
-				{
-					return comparer(element, pivot);
-				}, begin, end-1);
-
-				return bound;
-			}
-
-
-			/// Partitions with predictor from \a begin to \a end
-			template <Callable<bool, const T&> C>
-			constexpr std::size_t partition (C predictor, std::size_t begin, std::size_t end)
-			{
-				assert(begin <= end);
-				assert(end <= length);
-
-				using std::swap;
-
-				while (true)
-				{
-					while (predictor(values[first])) ++first;
-					--end;
-					while (not predictor(values[end]) --end;
-
-					if (first == end) return first;
-					swap(values[first], values[end]);
-					++begin;
-				}
 			}
 
 			/// Builds heap with \a comparer from \a begin to \a end
@@ -152,13 +143,300 @@ namespace stdext
 				}
 			}
 
-
-			/// Introselection
+			/// Min heap selection
+			///
+			/// Within the range \a begin to \a middle, a max heap will be built which will contain the
+			/// \a middle - \a begin lowest values of the range \a begin to \a end. The order is given
+			/// by \a comparer which defines a strict weak ordering.
 			template <Callable<bool, const T&, const T&> C>
-			constexpr void intro_select (C comparer, std::size_t index, std::size_t depth)
+			constexpr void min_heap_select (C comparer, std::size_t begin, std::size_t middle, std::size_t end)
 			{
-				
+				assert(begin < middle);
+				assert(middle <= end);
+				assert(end <= length);
+
+				auto rev_comparer = [&](const auto & b, const auto & b){return comparer(b, a);};
+				build_heap(rev_comparer, begin, middle);
+				for (auto index = middle; index < end; ++index)
+				{
+					if (comparer(values[index], values[begin]))
+					{
+						swap(values[index], values[begin]);
+						heapify(rev_comparer, begin, middle, begin);
+					}
+				}
 			}
+
+			/// Max heap selection
+			///
+			/// Within the range \a middle to \a end, a min heap will be built which will contain the
+			/// \a end - \a middle biggest values of the range \a begin to \a end. The order is given by
+			/// \a comparer which defines a strict weak ordering.
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void max_heap_select (C comparer, std::size_t begin, std::size_t middle, std::size_t end)
+			{
+				assert(begin <= middle);
+				assert(middle < end);
+				assert(end <= length);
+
+				build_heap(comparer, middle, end);
+				for (auto index = begin; index < middle; ++index)
+				{
+					if (comparer(values[middle], values[index]))
+					{
+						swap(values[index], values[middle]);
+						heapify(comparer, middle, end, middle);
+					}
+				}
+			}
+
+			/// Heap selection
+			template <Callable<bool, const T&, cosnt T&> C>
+			constexpr void heap_select (C comparer, std::size_t begin, std::size_t end, std::size_t n)
+			{
+				assert(begin <= n);
+				assert(n < end);
+				assert(end <= length);
+
+				using std::swap;
+
+				const auto middle = begin + (end - begin) / 2;
+				if (n < middle)
+				{
+					max_heap_select(std::move(comparer), begin, n, end);
+				}
+				else
+				{
+					min_heap_select(std::move(comparer), begin, n+1, end);
+					swap(values[begin], values[n]);
+				}
+			}
+
+			/// Heap popping
+			///
+			/// All values in the heap structure spanning from \a begin to \a end are popped and placed
+			/// in reverse order given by \a comparer. Eventually, all values will be sorted in place in
+			/// reverse order.
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void pop_total_heap (C comparer, std::size_t begin, std::size_t end)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+
+				using std::swap;
+
+				auto index = end;
+				while (index - begin > 3)
+				{
+					--index;
+					swap(values[begin], values[begin+1]);
+					heapify(comparer, begin, index, begin);
+				}
+
+
+				if (index - begin == 3)
+				{
+					if (comparer(values[begin+1], values[begin+2]))
+					{
+						swap(values[begin], values[begin+2]);
+					}
+					else
+					{
+						auto tmp = std::move(values[begin]);
+						values[begin] = std::move(values[begin+1]);
+						values[begin+1] = std::move(values[begin+2]);
+						values[begin+2] = std::move(tmp);
+					}
+				}
+				else if (index - begin == 2)
+				{
+					swap(values[begin], values[begin+1]);
+				}
+			}
+
+			template <Callable<bool, const T&, const T&> C>
+			constexpr intro_select (C comparer, std::size_t begin, std::size_t end, std::size_t limit, std::size_t n)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+				assert(begin <= n);
+				assert(n < end);
+
+				using std::swap;
+
+				while (end - begin > 3)
+				{
+					if (limit == 0)
+					{
+						heap_select(comparer, begin, end, n);
+						return;
+					}
+					else
+					{
+						--limit;
+						const auto cut = partition_randomly(comparer, begin, end);
+						if (cut <= n) begin = cut;
+						else          end = cut;
+					}
+				}
+
+				insertion_sort(comparer, begin, end);
+			}
+
+
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void intro_sort (C comparer, std::size_t begin, std::size_t end, std::size_t limit, std::size_t minLength)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+
+				while (end - begin > minLength)
+				{
+					if (limit == 0)
+					{
+						const auto rev_comparer = [&](const auto & a, const auto & b){return comparer(b, a);};
+						build_heap(rev_comparer, begin, end);
+						pop_heap(rev_comparer, begin, end);
+					}
+					else
+					{
+						--limit;
+						const auto cut = partition_randomly(comparer, begin, end);
+						intro_sort(comparer, begin, end, limit, minLength);
+						end = cut;
+					}
+				}
+			}
+
+
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void merge_sort (C comparer, std::size_t begin, std::size_t end, std::size_t minLength)
+			{
+				if (end - begin > minLength)
+				{
+					const auto middle = begin + (end - begin) / 2;
+					merge_sort(comparer, begin, middle, minLength);
+					merge_sort(comparer, middle, end, minLength);
+					merge_sorted(comparer, begin, middle, end);
+					sort_merge_inplace(comparer, begin, middle, end);
+				}
+				else
+				{
+					insertion_sort(comparer, begin, end);
+				}
+			}
+
+
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void sort_merge_inplace (C comparer, std::size_t begin, std::size_t middle, std::size_t end)
+			{
+				assert(begin <= middle);
+				assert(middle <= end);
+				assert(end <= length);
+
+				using std::swap;
+
+				while (begin < middle and middle < end)
+				{
+
+					// skip all values on the left part which are lower than the first on the right part
+					while (begin < middle and not comparer(values[middle], values[begin]))
+						++begin;
+
+					// now swap from right to left as long the heading right element is less than the left one
+					auto right = middle;
+					while (right < end and begin < middle and not comparer(values[right], values[begin]))
+					{
+						swap(values[begin], values[right]);
+						++begin;
+						++right;
+					}
+					
+					// handle three partitions until we got two again
+					while (begin < middle and right < end)
+					{
+						if (not comparer(values[middle], values[begin]) and not comparer(values[right], values[begin]))
+						{
+							++begin;
+						}
+						else if (not comparer(values[begin], values[middle]) and not comparer(values[right], values[middle]))
+						{
+							auto tmp = std::move(values[begin]);
+							values[begin] = std::move(values[middle]);
+							auto index = middle;
+							while (index + 1 < right and comparer(values[index + 1], tmp))
+							{
+								values[index] = std::move(values[index + 1];
+								++index;
+							}
+							values[index] = std::move(tmp);
+							++begin;
+						}
+						else
+						{
+							auto tmp = std::move(values[begin]);
+							values[begin] = std::move(values[right]);
+							auto index = right;
+							while (index > middle and comparer(tmp, values[index - 1]))
+							{
+								values[index] = std::move(values[index - 1];
+								--index;
+							}
+							values[index] = std::move(tmp);
+							++begin;
+							++right;
+						}
+					}
+
+					if (begin == middle) middle = right;
+				}
+			}
+
+			
+			/// Partitions with pivot taken randomly from the values
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::size_t partition_randomly (C comparer, std::size_t begin, std::size_t end)
+			{
+				assert(begin + 3 < end);
+				assert(end <= length);
+
+				using std::swap;
+
+				const auto middle = begin + (end - begin) / 2;
+				const auto median = get_median_index(comparer, begin, middle, end-1);
+				if (median != end-1) swap(values[median], values[end-1]);
+
+				const T& pivot = values[end-1];	
+				const auto bound = partition([&pivot, &comparer](const auto & element)
+				{
+					return comparer(element, pivot);
+				}, begin, end-1);
+
+				return bound;
+			}
+
+
+			/// Partitions with predictor from \a begin to \a end
+			template <Callable<bool, const T&> C>
+			constexpr std::size_t partition (C predictor, std::size_t begin, std::size_t end)
+			{
+				assert(begin <= end);
+				assert(end <= length);
+
+				using std::swap;
+
+				while (true)
+				{
+					while (predictor(values[first])) ++first;
+					--end;
+					while (not predictor(values[end]) --end;
+
+					if (first == end) return first;
+					swap(values[first], values[end]);
+					++begin;
+				}
+			}
+
 
 		public:
 
@@ -505,83 +783,75 @@ namespace stdext
 			///	with \a match_prefix, matching suffix is tested with \a match_suffix and matching the
 			/// complete view is tested with \a match.
 			///
+			/// @param elements
+			/// @param matcher
+			///
 			/// @{
 
 			template <BoundedSequence<T> S>
 			constexpr bool match_prefix (S elements) const
 			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
+				const auto folding = fold([values, length](auto index, auto element)
 				{
-					const auto keepGoing = index < limit and values[index] == element;
-					return std::make_tuple(index + 1, keepGoing);
+					const auto keepOn = index < length and values[index] == element;
+					return std::make_tuple(index + 1, keepOn);
 				}, std::size_t(0), std::move(elements));
-				elements = std::move(std::get<1>(state));
-				return not elements;
+				return not std::get<1>(folding);
 			}
 
 			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
 			constexpr bool match_prefix (C matcher, S elements) const
 			{
-				auto state = fold([matcher=std::move(matcher), values=values, limit=length]
-					(auto index, auto element)
+				const auto folding = fold([values, length, matcher=std::move(matcher)](auto index, auto element)
 				{
-					const auto keepGoing = index < limit and matcher(values[index], element);
-					return std::make_tuple(index + 1, keepGoing);
+					const auto keepOn = index < length and matcher(values[index], element);
+					return std::make_tuple(index + 1, keepOn);
 				}, std::size_t(0), std::move(elements));
-				elements = std::move(std::get<1>(state));
-				return not elements;
+				return not std::get<1>(folding);
 			}
 
 			template <BoundedSequence<T> S>
 			constexpr bool match_suffix (S elements) const
 			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
+				const auto folding = fold([values](auto index, auto element)
 				{
-					const auto keepGoing = index > 0 and values[index] == element;
-					return std::make_tuple(index - 1, keepGoing);
+					const auto keepOn = index > 0 and values[index-1] == element;
+					return std::make_tuple(index - 1, keepOn);
 				}, length, std::move(elements));
-				elements = std::move(std::get<1>(state));
-				return not elements;
+				return not std::get<1>(folding);
 			}
 
-			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
+			template <BoundedSequence, Callable<bool, const T&, sequence_type_t<S>> C>
 			constexpr bool match_suffix (C matcher, S elements) const
 			{
-				auto state = fold([matcher=std::move(matcher), values=values, limit=length]
-					(auto index, auto element)
+				const auto folding = fold([values, matcher=std::move(matcher)](auto index, auto element)
 				{
-					const auto keepGoing = index > 0 and matcher(values[index - 1], element);
-					return std::make_tuple(index - 1, keepGoing);
+					const auto keepOn = index > 0 and matcher(values[index-1], element);
+					return std::make_tuple(index - 1, keepOn);
 				}, length, std::move(elements));
-				elements = std::move(std::get<1>(state));
-				return not elements;
+				return not std::get<1>(folding);
 			}
 
 			template <BoundedSequence<T> S>
 			constexpr bool match (S elements) const
 			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
+				const auto folding = fold([values, length](auto index, auto element)
 				{
-					const auto keepGoing = index < limit and values[index] == element;
-					return std::make_tuple(index + (keepGoing ? 1 : 0), keepGoing);
+					const auto keepOn = index < length and values[index] == element;
+					return std::make_tuple(index + (keepOn ? 1 : 0), keepOn);
 				}, std::size_t(0), std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				return index == length and not elements;
+				return std::get<0>(folding) == length and not std::get<1>(folding);
 			}
 
 			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
 			constexpr bool match (C matcher, S elements) const
 			{
-				auto state = fold([matcher=std::move(matcher), values=values, limit=length]
-					(auto index, auto element)
+				const auto folding = fold([values, length, matcher=std::move(matcher)](auto index, auto element)
 				{
-					const auto keepGoing = index < limit and matcher(values[index], elements);
-					return std::make_tuple(index + (keepGoing ? 1 : 0), keepGoing);
+					const auto keepOn = index < length and matcher(values[index], element);
+					return std::make_tuple(index + (keepOn ? 1 : 0), keepOn);
 				}, std::size_t(0), std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				return index == length and not elements;
+				return std::get<0>(folding) == length and not std::get<1>(folding);
 			}
 
 			/// @}
@@ -831,7 +1101,7 @@ namespace stdext
 
 			template <UnboundedSequence<T> S>
 			constexpr S assign (S elements)
-			{
+							{
 				auto state = fold([values, length](auto index, auto element)
 				{
 					if (index < length)
@@ -839,6 +1109,107 @@ namespace stdext
 					return std::make_tuple(index + (index < length ? 1 : 0), index < length);
 				}, std::size_t(0), std::move(elements));
 				return std::get<1>(state);
+			}
+
+			/// @}
+
+
+
+			// ------------------------------------------------------------------------------------------
+			// Splitting
+
+			/// Decomposition
+			///
+			/// The view is decomposed into its first value and a view for the remaining values. If the
+			/// view contains no values, an empty optional container will be returned.
+			///
+			constexpr optional<std::tuple<const T&, array_view>> operator () () const
+			{
+				return make_optional(length > 0, [&]()
+				{
+					return std::make_tuple(*values, array_view(values + 1, length - 1));
+				});
+			}
+
+			/// View splitting
+			///
+			/// Splits view into two parts of which the first part has a length of at most pos elements
+			/// and the second part is the complementary remainings of the original view
+			///
+			/// @param n  length of the first view
+			///
+			constexpr std::tuple<array_view, array_view> split (std::size_t n) const
+			{
+				const auto count = n <= length ? n : length;
+				const auto first = array_view(values, count);
+				const auto second = array_view(values + count, length - count);
+				return std::make_tuple(first, second);
+			}
+
+
+			/// Prefix splitting
+			///
+			/// The view is splitted into a prefix and a stem and optionally some delimiter.
+			///
+			/// @{
+			///
+
+			template <typename V, Callable<std::tuple<V, bool>, const T&> C>
+			constexpr std::tuple<array_view, array_view, V> split_prefix (C predictor, V value) const
+			{
+				auto keepOn = true;
+				std::size_t index = 0;
+
+				while (index < length and keepOn)
+				{
+					std::tie(value, keepOn) = predictor(std::move(value), values[index]);
+					if (keepOn) ++index;
+				}
+
+				const auto pre = array_view(values, index);
+				const auto post = array_view(values + index, length - index);
+				return std::make_tuple(pre, post, std::move(value));
+			}
+
+			template <typename V, Callable<bool, const T&> C>
+			constexpr std::tuple<array_view, array_view> split_prefix (C predictor) const
+			{
+				auto index = 0;
+				while (index < length and predictor(values[index]))
+					++index;
+				const auto pre = array_view(values, index);
+				const auto post = array_view(values + index, length - index);
+				return std::make_tuple(pre, post);
+			}
+
+			template <Sequence<T> S>
+			constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
+			{
+				auto folding = fold([values, length](auto index, auto element)
+				{
+					const auto keepTesting = index < length and values[index] == element;
+					return std::make_tuple(index + (keepTesting ? 1 : 0), keepTesting);
+				}, std::size_t(0), std::move(sequence));
+				const auto count = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding);
+				const auto prefix = array_view(values, count);
+				const auto stem = array_view(values + count, length - count);
+				return std::make_tuple(prefix, stem, std::move(sequence));
+			}
+		
+			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
+			constexpr std::tuple<array_view, array_view, S> split_prefix (C matcher, S sequence) const
+			{
+				auto folding = fold([&matcher, values, length](auto index, auto element)
+				{
+					const auto keepTesting = index < length and matcher(values[index], element);
+					return std::make_tuple(index + (keepTesting ? 1 : 0), keepTesting);
+				}, std::size_t(0), std::move(sequence));
+				const auto count = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding));
+				const auto prefix = array_view(values, count);
+				const auto stem = array_view(values + count, length - count);
+				return std::make_tuple(prefix, stem, std::move(sequence));
 			}
 
 			/// @}
@@ -853,29 +1224,6 @@ namespace stdext
 			/// Decomposition methods allow to get views on 
 			/// @{
 			
-				/// Decomposes the view into its heading value and a view onto all elements after the first
-				/// one
-				///
-				/// If the view is not empty, an optional container with tuple of the first value with a view
-				/// on the trailing values is returned. If the is empty, an empty optional container will be
-				/// returned.
-				constexpr optional<std::tuple<T, array_view>> operator () () const
-				{
-					return make_optional(length > 0, [&](){return std::make_tuple(*values, array_view(values+1, length-1));});
-				}
-				
-				/// Splits view into two parts of which the first part has a length of at most pos elements
-				/// and the second part is the complementary remainings of the original view
-				///
-				/// @param n  length of the first view
-				///
-				constexpr std::tuple<array_view, array_view> split (std::size_t n) const
-				{
-					const auto count = n <= length ? n : length;
-					const auto first = array_view(values, count);
-					const auto second = array_view(values + count, length - count);
-					return std::make_tuple(first, second);
-				}
 				
 				
 				/// Splits view into some prefix and the remainings called stem by traversing the elements
@@ -1145,6 +1493,9 @@ namespace stdext
 			/// @}
 
 
+
+			// ------------------------------------------------------------------------------------------
+			// Taker and dropper
 
 			/// Takes prefix from the view
 			///
@@ -1440,6 +1791,10 @@ namespace stdext
 
 
 
+
+			// ------------------------------------------------------------------------------------------
+			// Rotation and Reversion
+
 			/// Rotates values \a count times to the right
 			///
 			/// The values in the view will be rotated by \a count shifts to the right. The rotation will
@@ -1450,23 +1805,16 @@ namespace stdext
 			///
 			constexpr void rotate (std::size_t count)
 			{
-				if (length > 1 and (count % length) > 0)
-				{
-					count %= length;
-					auto next = count;
-					auto first = 0;
-					while (next != first)
-					{
-						swap(values[first], values[next]);
-						++first;
-						++next;
-						if (next == length) next = count;
-						else if (first == count) count = next;
-					}
-				}
+				static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
+				static_assert(std::is_nothrow_copy_constructible<T>:value,
+					"Values of array_view must be nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Values of array_view must be nothrow copy assignable!");
+
+				rotate(0, length, count);
 			}
 
-			/// Reverses values in place
+			/// Revertion
 			///
 			/// The values in the view will be reversed. The revertion will be performed in place.
 			///
@@ -1474,15 +1822,22 @@ namespace stdext
 			///
 			constexpr void reverse ()
 			{
-				const auto count = length / 2;
-				const auto offset = (length + 1) / 2;
-				using std::swap;
-				for (std::size_t index = 0; index < count; ++index)
-					swap(values[index], values[index + offset]);
+				static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Values of array_view must be nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Values of array_view must be nothrow copy assignable!");
+
+				reverse(0, length);
 			}
 
 
-			/// Partitions stabely
+
+
+			// ------------------------------------------------------------------------------------------
+			// Partition
+
+			/// Stable partition
 			///
 			/// All values will be rearranged into two contiguous parts which span the whole view. The
 			/// first part will contain elements which are conform with the \a predictor. The second part
@@ -1538,7 +1893,7 @@ namespace stdext
 			}
 
 
-			/// Partitions unstabely
+			/// Unstable partition
 			///
 			/// All values will be rearranged into two contiguous parts which span the whole view. The
 			/// first part will contain elements which are conform with the \a predictor. The second part
@@ -1571,7 +1926,7 @@ namespace stdext
 				}
 			}
 
-			/// Partitions with pivot taken randomly from its values
+			/// Partition with random pivot
 			///
 			/// The values will be rearranged into two parts. Each element in the first part will be in
 			/// right order compared with each element in the second part. The order is defined by \a
@@ -1589,7 +1944,11 @@ namespace stdext
 			template <Callable<bool, const T&, const T&> C>
 			constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
 			{
-				static_assert(not std::is_const<T>::value, "");
+				static_assert(not std::is_const<T>::value, "Value of array_view must not be const!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Value of array_view must be at least nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be at least nothrow copy assignable!");
 			
 				if (length > 3)
 				{
@@ -1600,132 +1959,226 @@ namespace stdext
 				}
 				else if (length == 3)
 				{
-					
+					// TODO implementation
 				}
 			}
 
-			///	Partitions into prefix and suffix of sorting values
+			///	Sorted partition
 			///
 			/// The values will be rearranged into two parts. The first part will contain all values
 			/// which belong to the top \a count values when sorted with \a comparer. The second part
 			/// will contain all remaining values. These are the bottom \a length - \a count values when
 			/// sorted with \a comparer. The returning views will be contiguous and will span the
-			/// original view.
-			template <Callable<bool, const T&, cosnt T&> C>
-			constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t prefixCount)
+			/// original view. Values within one part are not guaranteed to have any order in place.
+			///
+			/// @param comparer  A callable object which takes two constant references for some value of
+			///                  type \a T and returns a boolean which indicates if the two values are in
+			///                  right order
+			/// @param count     Amount of values in the first part of the partition
+			///
+			/// @note Time complexity is \a count + (\a length - \a count) log(\a count).
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t count)
 			{
-				if (prefixCount > length) prefixCount = length;
+				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Value of array_view must be nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be nothrow_copy assignable!");
 
-				if (prefixCount == length)
+				// adjust count if necessary
+				if (count > length)
+					count = length;
+
+				// boundary case is partition length: length, 0
+				if (count == length)
 				{
 					return std::make_tuple(*this, array_view());
 				}
-				else if (prefixCount == 0)
+				// boundary case is partition length: 0, length
+				else if (count == 0)
 				{
 					return std::make_tuple(array_view(), *this);
 				}
-				else if (prefixCount * 2 > length)
+				// target partition which will be bigger,
+				// here it is the first part
+				else if (count * 2 > length)
 				{
 					auto rev_comparer = [&](const auto & a, const auto & b){return comparer(b, a);};
-					build_heap(rev_comparer, 0, prefixCount);
-					for (auto index = prefixCount; index < length; ++index)
+					build_heap(rev_comparer, 0, count);
+					for (auto index = count; index < length; ++index)
 					{
 						if (comparer(values[index], values[0]))
 						{
 							swap(values[index], index[0]);
-							heapify(rev_comparer, 0, prefixCount, 0);
+							heapify(rev_comparer, 0, count, 0);
 						}
 					}
-					const auto suffixCount = length - prefixCount;
-					return std::make_tuple(array_view(values, prefixCount), array_view(values + prefixCount, suffixCount));
+					const auto pre = array_view(values, count);
+					const auto post = array_view(values + count, length - count);
+					return std::make_tuple(pre, post);
 				}
+				// target partition which will be bigger,
+				// here it is the second part
 				else
 				{
-					build_heap(comparer, prefixCount, length);
-					for (auto index = prefixCount; index > 0; --index)
+					build_heap(comparer, count, length);
+					for (auto index = count; index > 0; --index)
 					{
-						if (comparer(values[prefixCount], values[index-1]))
+						if (comparer(values[count], values[index-1]))
 						{
-							swap(values[index-1], values[prefixCount]);
-							heapify(comparer, prefixCount, end, prefixCount);
+							swap(values[index-1], values[count]);
+							heapify(comparer, count, end, count);
 						}
 					}
-					const auto suffixCount = length - prefixCount;
-					return std::make_tuple(array_view(values, prefixCount), array_view(values + prefixCount, suffixCount));
+					const auto pre = array_view(values, count);
+					const auto post = array_view(values + count, length - count);
+					return std::make_tuple(pre, post);
 				}
 			}
 
-			/// Sort prefix
+
+			
+
+			// ------------------------------------------------------------------------------------------
+			// Sorting
+
+			/// Prefix sorting
+			///
+			/// The values will be rearranged into two parts. The first part will contain the \a count
+			/// lowest values in sorted order. The second part will contain the remaining values without
+			/// any guarantee of order. The order is defined by \a comparer and must be strict weak. The
+			/// first and second part will be returned as view. If \a count is bigger than \a length(),
+			/// then the whole view will be sorted.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			/// @param count     Length of prefix which should be sorted
+			///
+			/// @note Average time complexity is \doctodo
+			///
 			template <Callable<bool, const T&, const T&> C>
 			constexpr std::tuple<array_view, array_view> sort_prefix (C comparer, std::size_t count)
-			{}
+			{
+				if (count > length)
+					count = length;
+				
+				if (count == 0)
+					return std::make_tuple(array_view(), *this);
 
-			/// Sort suffix
+				min_heap_select(comparer, 0, count, length);
+				pop_total_heap([&](const auto & a, const auto & b){return comparer(b, a);}, 0, count);
+				const auto pre = array_view(values, count);
+				const auto post = array_view(values + count, length - count);
+				return std::make_tuple(pre, post);
+			}
+
+			/// Suffix sorting
+			///
+			/// The values will be rearranged into two parts. The first part will contain the \a length()
+			/// - \a count lowest values without any guarantee of order. The second part will contain the
+			/// \a count greatest values in sorted order. The order is defined by \a comparer and must be
+			/// strict weak. The first and second part will be returned as view.
+			///
+			/// @param comparer
+			/// @param count
+			///
+			/// @note Average time complexity is ...
+			/// @note Worst-case time complexity is ...
+			///
 			template <Callable<bool, const T&, const T&> C>
 			constexpr std::tuple<array_view, array_view> sort_suffix (C comparer, std::size_t count)
-			{}
+			{
+				if (count > length)
+					count = length;
 
-			/// Sort nth element
+				if (count == 0)
+					return std::make_tuple(*this, array_view());
+
+				const auto bound = length - count;
+				max_heap_select(comparer, 0, bound, length);
+				pop_total_heap(comparer, bound, length);
+				reverse(bound, length);
+				const auto pre = array_view(values, bound);
+				const auto post = array_view(values + bound, count);
+				return std::make_tuple(pre, post);
+			}
+
+			/// Nth element sorting
+			///
+			/// Values will be rearranged into two partitions such that the first part contains the \a n
+			/// lowest values and the second part contains the length() - n - 1 greatest values. The
+			/// first part will be placed at the beginning of the view and the second part will be placed
+			/// at the ending of the view, so that value at index \a n corresponds to the value if sorted
+			/// with \a comparer. The order defined by \a comparer must be strict weak. The returning is
+			/// a tuple of the first part, the value at the \a n th position and the second part or an
+			/// empty optional container, if \a n is equal or greater the view's length.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			///
+			/// @note Average time complexity is ...
+			///
 			template <Callable<bool, const T&, const T&> C>
 			constexpr optional<std::tuple<array_view, const T&, array_view>> sort_nth (C comparer, const std::size_t n)
 			{
 				return make_optional(n < length, [&]()
 				{
-					using std::swap;
-
-					auto depth = 2 * __builtin_clz(n);
-					auto begin = 0;
-					auto end = length;
-
-					while ((end - begin) > 3)
-					{
-						if (depth == 0)
-						{
-							build_heap(comparer, n, end);
-							auto index = n;
-							while (index > begin)
-							{
-								--index;
-								if (comparer(values[n], values[index]))
-								{
-									swap(values[n], values[index]);
-									heapify(comparer, n, end, n);
-								}
-							}
-							break;
-						}
-						else
-						{
-							--depth;
-							const auto cut = partition_randomly(comparer, begin, end);
-							if (cut <= n) first = cut;
-							else          end = cut;
-						}
-					}
-
-					if ((end - begin) <= 3)
-						insertion_sort(comparer, begin end);
-					
-					auto pre = array_view(values, n);
-					auto post = array_view(values + n + 1, length - n - 1);
+					intro_select(comparer, 0, length, n);
+					const auto pre = array_view(values, n);
+					const auto post = array_view(values + n + 1, length - n -1);
 					return std::make_tuple(pre, values[n], post);
 				});
 			}
 
-			/// Sort unstabely all values
+			/// Unstable sorting
 			///
-			/// All values will be sorted according to \a comparer. The order of \a comparer must be a
-			/// strict weak one.
+			/// Values will be sorted according to order defined by \a comparer. The order must be strict
+			/// weak. Previous orders between values are not guaranteed to be kept after sorting.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			///
+			/// @note Average time complexity is n*log(n) with n being the length of the view.
+			/// @note Worst-case time complexity is 
+			///
 			template <Callable<bool, const T&, const T&> C>
 			constexpr void sort (C comparer)
 			{
-				
+				static_assert(not std::is_const<T>::value, "Value of array_view must be not const!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Value of array_view must be at least nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be at least nothrow copy assignable!");
+
+				if (length > 1)
+				{
+					const auto recursionLimit = lg2(length) * 2;
+					const auto minPartitionLength = 16;
+					intro_sort(comparer, 0, length, recursionLimit, minPartitionLength);
+					for (std::size_t begin = 0; begin < length; begin += minPartitionLength);
+					{
+						const auto hypEnd = begin + minPartitionLength;
+						const auto end = hypEnd <= length ? hypEnd : length;
+						insertion_sort(comparer, begin, end);
+					}
+				}
 			}
 
-			/// Sort stabely all values
+			/// Stable sorting
 			template <Callable<bool, const T&, const T&> C>
 			constexpr void sort_stabely (C comparer)
-			{}
+			{
+				static_assert(not std::is_const<T>::value, "Value of array_view must be not constant!");
+				static_assert(std::is_nothrow_copy_constructible<T>::value,
+					"Value of array_view must be at least nothrow copy constructible!");
+				static_assert(std::is_nothrow_copy_assignable<T>::value,
+					"Value of array_view must be at least nothrow copy assignable!");
+
+				if (length > 1)
+					merge_sort(comparer, 0, length, 16);
+			}
 
 	};
 
