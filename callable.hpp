@@ -5,27 +5,36 @@
 #ifndef __STDEXT_CALLABLE_HPP__
 #define __STDEXT_CALLABLE_HPP__
 
-#include <type_traits>
-
 namespace stdext
 {
 
-	template <typename C, typename R, typename ... Args> concept bool Callable = require ()
+
+	template <typename C, typename R, typename ... Args> concept bool Callable = requires ()
 	{
-		return require(C c, Args ... args)
+		return requires(C c, Args ... args)
 		{
-			c(args ...),
-			std::is_convertible<decltype(c(args ...)), R>::value
+			{c(args ...)} -> R
 		};
 	}
 	
-	template <typename C, typename ... Args> concept bool Callable_ = require ()
+	template <typename C, typename ... Args> concept bool Callable_ = requires ()
 	{
 		return require(C c, Args ... args)
 		{
 			c(args ...)
 		};
 	}
+
+	template <typename T>
+	struct result_of
+	{};
+
+	template <typename T, typename ... Args>
+	struct result_of<T(Args ...)>
+	{
+		template <typename U> static U&& invoke ();
+		using type = decltype(invoke<T>()(invoke<Args>() ...));
+	};
 
 }
 
