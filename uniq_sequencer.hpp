@@ -11,6 +11,8 @@ namespace stdext
 {
 
 	/// Uniq sequencer for bounded sequence
+	///
+	/// The sequencer removes all contiguous duplicates from the held sequence.
 	template <BoundedSequence S, Callable<bool, const T&, const T&> C>
 	class bounded_uniq_sequencer
 	{
@@ -78,7 +80,8 @@ namespace stdext
 					if (not sequencer.isNextPulled)
 						value = combiner(std::move(value), head);
 
-					return fold([&head, &matcher, combiner=std::move(combiner)](auto value, auto element)
+
+					return fold([&head, &matcher, &combiner](auto value, auto element)
 					{
 						if (not matcher(head, element))
 						{
