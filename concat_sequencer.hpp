@@ -70,6 +70,9 @@ namespace stdext
 			}
 	
 			/// Folding all elements
+			///
+			/// All elements in \a sequencer will be folded by \a combiner starting with \a value. The
+			/// folded value will be returned.
 			template <typename V, Callable<V, V, value_type> C>
 			friend constexpr V fold (C combiner, V value, bounded_concat_sequencer sequencer)
 			{
