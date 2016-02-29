@@ -92,7 +92,7 @@ namespace stdext
 				return std::make_tuple(std::move(value), std::move(elements));
 			}
 
-			/// Reverse folding
+			/// Full reverse folding
 			///
 			/// All elements in the sequence \a elements are folded in reverse by \a combiner starting at
 			/// \a value. The folded value will be returned.
