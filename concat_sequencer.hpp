@@ -103,6 +103,21 @@ namespace stdext
 				sequencer = bounded_concat_sequencer(std::move(std::get<1>(folding)));
 				return std::make_tuple(std::move(value), std::move(sequencer));
 			}
+
+			/// Reversly folding all elements
+			///
+			/// All elements in \a sequencer are folded in reverse by \a combiner over \a value. The
+			/// folded value will be returned.
+			template <typename V, Callable<V, V, value_type> C>
+			friend constexpr V fold_reverse (C combiner, V value, bounded_concat_sequencer sequencer)
+			{
+				const auto indices = revert(index_sequence_for<Bs ...>());
+				auto & sequences = sequencer.sequences;
+				return indices.fold([&combiner, &sequences](auto index, auto value)
+				{
+					return fold_reverse(combiner, std::move(value), std::move(std::get<index>(sequences)));
+				}, std::move(value));
+			}
 	}
 	
 	
