@@ -92,21 +92,6 @@ namespace stdext
 				return std::make_tuple(std::move(value), std::move(elements));
 			}
 
-			/// Full reverse folding
-			///
-			/// All elements in the sequence \a elements are folded in reverse by \a combiner starting at
-			/// \a value. The folded value will be returned.
-			template <typename V, Callable<V, V, value_type> C>
-			friend constexpr V fold_reverse (C combiner, V value, bounded_transform_sequencer elements)
-			{
-				const auto & transformer = elements.transformer;
-				return fold_reverse([combiner=std::move(combiner), transformer=std::move(elements.transformer)]
-					(auto value, auto element)
-				{
-					return combiner(std::move(value), transformer(std::move(element)));
-				}, std::move(value), std::move(elements.elements));
-			}
-
 			/// Computes the amount of the elements
 			friend constexpr std::size_t length (const bounded_transform_sequencer & sequencer)
 			{
