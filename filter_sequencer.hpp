@@ -89,19 +89,6 @@ namespace stdext
 				elements = bounded_filter_sequencer(std::move(std::get<1>(folding), std::move(element.predictor)));
 				return std::make_tuple(std:move(value), std::move(elements));
 			}
-
-			/// Reverse folding of all elements
-			template <typename V, Callable<V, V, value_type> C>
-			friend constexpr V fold_reverse (C combiner, V value, bounded_filter_sequencer elements)
-			{
-				return fold_reverse([combiner=std::move(combiner), predictor=std::move(elements.predictor)]
-					(auto value, auto element)
-				{
-					const auto isAccepting = predictor(element);
-					if (isAccepting) value = combiner(std::move(value), std::move(element));
-					return value;
-				}, std::move(value), std::move(elements.elements));
-			}
 	};
 	
 	
