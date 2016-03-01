@@ -260,32 +260,6 @@ namespace stdext
 	}
 
 
-	/// General implementation of reversly folding all elements of a bounded sequence
-	///
-	///	Elements of \ sequence are folded in reverse by \a combiner over \a value. The returning
-	/// value will be folded reversly over all elements.
-	///
-	/// @note The general implementation will be quadratic in the length of the sequence.
-	///
-	template <typename V, BoundedSequence S, Callable<V, V, sequence_type_t<S>> C>
-	constexpr V fold_reverse (C combiner, V value, S sequence)
-	{
-		const auto length = length(sequence);
-		for (std::size_t count = 0; count < length; ++count)
-		{
-			auto folding = fold([&](auto values, auto element)
-			{
-				auto value = std::move(std::get<0>(values));
-				auto index = std::get<1>(values);
-				if (index == count) value = combiner(std::move(value), std::move(element));
-				return std::make_tuple(index - 1, index != count);
-			}, std::make_tuple(std::move(value), length), sequence);
-			value = std::move(std::get<0>(folding));
-		}
-		return value;
-	}
-
-	
 	template <typename S>
 		requires BoundedSequence<S>
 	constexpr std::size_t length (S sequence)
