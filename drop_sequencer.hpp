@@ -116,29 +116,6 @@ namespace stdext
 				return std::make_tuple(std::move(value), std::move(elements));
 			}
 
-			/// Reversly folding all elements
-			///
-			/// If the prefix has not been dropped, it will be dropped. The remaining elements will be
-			/// folded in reverse by \a combiner starting with \a value. If the prefix has already been
-			/// dropped, the elements left in \a sequence will be folded in reverse by \a combiner
-			/// starting with \a value. The folded value will be returned.
-			template <typename V, Callable<V, V, value_type> C>
-			friend constexpr V fold_reverse (C combiner, V value, bounded_drop_sequencer sequence)
-			{
-				// if not initialised, then drop the prefix
-				if (not elements.initialised)
-				{
-					elements.elements = sd::get<1>(fold([predictor=std::move(elements.predictor)]
-						(auto value, auto element)
-					{
-						return std::make_tuple(int(0), predictor(element));
-					}, int(0), std::move(elements.elements)));
-				}
-
-				// fold reverse the remaining elements
-				return fold_reverse(std::move(combiner), std::move(value), std::move(elements.elements));
-			}
-
 			/// Computes the amout of elements
 			friend constexpr std::size_t length (const bounded_drop_sequencer & sequencer)
 			{
@@ -324,29 +301,6 @@ namespace stdext
 				sequencer = bounded_ndrop_sequencer(std::move(std::get<1>(folding)), 0);
 				return std::make_tuple(std::move(value), std::move(sequencer));
 			}
-
-			/// Reverse folding all elements
-			///
-			/// If the prefix has not been dropped, it will be. The remaining elements will be folded in
-			/// reverse by \a combiner starting at \a value. If the prefix has already been dropped, the
-			/// elements left in \a sequence will be folded in reverse by \a combiner starting at \a
-			/// value. The folded value will be returned.
-			template <typename V, Callable<V, V, value_type> C>
-			friend constexpr V fold_reverse (C combiner, V value, bounded_ndrop_sequencer sequence)
-			{
-				// prefix dropping
-				if (sequence.count > 0)
-				{
-					sequence.elements = std::get<1>(fold([](auto count, auto element)
-					{
-						return std::make_tuple(count - 1, count > 0);
-					}, sequence.count, std::move(sequence.elements)));
-				}
-
-				// reverse folding
-				return fold(std::move(combiner), std::move(value), std::move(sequence.elements));
-			}
-
 
 			/// Computes the amount of left elements
 			friend constexpr std::size_t length (const bounded_ndrop_sequencer & sequencer)
