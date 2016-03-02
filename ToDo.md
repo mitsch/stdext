@@ -1,0 +1,3 @@
+- [ ] Remove reversed algorithm from array_view
+- [ ] Add missing algorithm to reversed_array_view
+- [ ] Move internal algoriths of partitions, sorting, reversing, rotating into an extra file, so it can be used outside of array_view as well
