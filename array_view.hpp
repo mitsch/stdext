@@ -1045,36 +1045,6 @@ namespace stdext
 				return value;
 			}
 
-			template <Callable<T> C>
-			constexpr void assign_reverse (C assigner)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					values[index - 1] = assigner();
-			}
-
-			template <Callable<T, std::size_t> C>
-			constexpr void assign_reverse (C assigner)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					values[index - 1] = assigner(index - 1);
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, V> C>
-			constexpr V assign_reverse (C assigner, V value)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					std::tie(values[index-1], value) = assigner(std::move(value));
-				return value;
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, V, std::size_t> C>
-			constexpr V assign_reverse (C assigner, V value)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					std::tie(values[index - 1], value) = assigner(std::move(value), index - 1);
-				return value;
-			}
-
 			template <typename U>
 				requires std::is_convertible<U, T>::value
 			constexpr void assign (U constant)
