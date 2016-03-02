@@ -13,6 +13,11 @@
 namespace stdext
 {
 
+	// Forward declaration of array_view (cyclic dependency)
+	template <typename T> class array_view;
+
+
+
 	/// Reversed view on an array
 	///
 	/// The view on an array is seen from behind. So decomposition will be performed from the back to
@@ -37,6 +42,20 @@ namespace stdext
 				: values(data), length(count)
 			{}
 
+
+			/// Returns a straighten view onto its values
+			///
+			/// @{
+			constexpr array_view<T> reverse ()
+			{
+				return array_view<T>(values, length);
+			}
+
+			constexpr array_view<std::add_const_t<T>> reverse () const
+			{
+				return array_view<std::add_const_t<T>>(values, length);
+			}
+			/// @}
 
 
 			// ------------------------------------------------------------------------------------------
@@ -69,6 +88,12 @@ namespace stdext
 			}
 
 			/// @}
+
+			/// Returns a constant pointer to the beginning of the view
+			constexpr std::add_const_t<T> * data () const
+			{
+				return values;
+			}
 
 
 			/// Swapping
@@ -365,6 +390,253 @@ namespace stdext
 			}
 
 			/// @}
+
+
+
+			// ------------------------------------------------------------------------------------------
+			// Matching
+
+			/// Prefix matching
+			///
+			/// The reversed view is tested on having exactly \a sequence as its prefix. This method
+			/// accomplishes the same result like testing the straighten array view having \a sequence as
+			/// its suffix.
+			///
+			/// @{
+
+			template <BoundedSequence<T> S>
+			constexpr bool match_prefix (S sequence) const
+			{
+				return reverse().match_suffix(std::move(sequence));
+			}
+
+			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
+			constexpr bool match_prefix (C matcher, S sequence) const
+			{
+				return reverse().match_suffix(std::move(matcher), std::move(sequence));
+			}
+
+			/// @}
+
+
+			/// Suffix matching
+			///
+			/// The reversed view will be tested on having exactly \a sequence as its suffix. This method
+			/// accomplishes the same like testing the straighten array_view having \a sequence as its
+			/// prefix.
+			///
+			/// @{
+
+			template <BoundedSequence<T> S>
+			constexpr bool match_suffix (S sequence) const
+			{
+				return reverse().match_prefix(std::move(sequence));
+			}
+
+			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<T>> C>
+			constexpr bool match_suffix (C matcher, S sequence) const
+			{
+				return reverse().match_prefix(std::move(matcher), std::move(sequence));
+			}
+
+			/// @}
+
+
+			/// Complete matching
+			///
+			/// The complete reversed view will be tested on being equal to the exact \a sequence. The
+			/// last value in the view will be matched with the first element in \a sequence. The second
+			/// last value in the view will be matched with the second element in \a sequence and so on.
+			/// Matching will be succesfull, if the view and \a sequence have the same length and all
+			/// values are matched succesfully with their corresponding elements in \a sequence.
+			///
+			/// @{
+
+			template <BoundedSequence<T> S>
+			constexpr bool match (S sequence) const
+			{
+				// see how long we got when matching values with elements
+				auto folding = fold([&](auto index, auto element)
+				{
+					const auto keepOn = index > 0 and values[index - 1] == element;
+					const auto nextIndex = index - (keepOn ? 1 : 0);
+					return std::make_tuple(nextIndex, keepOn);
+				}, length, std::move(sequence));
+				const auto lastIndex = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding));
+
+				// the whole view must be traversed and not element must be contained by sequence
+				return lastIndex == 0 and not sequence;
+			}
+
+			template <BoundedSequene S, Callable<bool, const T&, sequence_type_t<S>> C>
+			constexpr bool match (C matcher, S sequence) const
+			{
+				// see how long we got when matching values with elements
+				auto folding = fold([&](auto index, auto element)
+				{
+					const auto keepOn = index > 0 and matcher(values[index - 1], element);
+					const auto nextIndex = index - (keepOn ? 1 : 0);
+					return std::make_tuple(nextIndex, keepOn);
+				}, length, std::move(sequence));
+				const auto lastIndex = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding));
+
+				// the whole view must be traversed and not element must be contained by sequence
+				return lastIndex == 0 and not sequence;
+			}
+
+			/// @}
+
+
+			/// Prefix mismatching
+			///
+			/// @{
+
+			template <Sequence<T> S>
+			constexpr std::tuple<reversed_array_view, reversed_array_view, S> mismatch_prefix (S sequence)
+			{
+				
+			}
+
+			/// @}
+
+
+
+
+			/// Transforming all values in reverse
+			///
+			/// All values in the view will be transformed in reversed order, so starting with the last
+			/// value and traversing to the first one.
+			///
+			/// @{
+
+			template <Callable<T, T> C>
+			constexpr void transform (C transformer)
+			{
+				for (std::size_t index = length; index > 0; --index)
+					values[index-1] = transformer(std::move(values[index-1]));
+			}
+
+			template <Callable<T, T, std::size_t> C>
+			constexpr void transform (C transformer)
+			{
+				for (std::size_t index = length; index > 0; --index)
+					values[index-1] = transformer(std::move(values[index-1]), index-1);
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V> C>
+			constexpr V transform (C transformer, V value)
+			{
+				for (std::size_t index = length; index > 0; --index)
+					std::tie(values[index-1], value) = transformer(std::move(values[index-1]), std::move(value));
+				return value;
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
+			constexpr V transform (C transformer, V value)
+			{
+				for (std::size_t index = length; index > 0; --index)
+					std::tie(values[index-1], value) = transformer(std::move(values[index-1], std::move(value), index-1);
+				return value;
+			}
+
+			/// @}
+
+			
+			/// Assignment
+			///
+			/// Each value in the view will be reassigned. The traversion will be in reverse. Different
+			/// kind of \a matcher can be used. 
+			///
+			/// @{
+
+			template <Callable<T> C>
+			constexpr void assign (C assigner)
+			{
+				for (auto index = length; index > 0; --index)
+					values[index-1] = assigner();
+			}
+
+			template <Callable<T, std::size_t> C>
+			constexpr void assign (C assigner)
+			{
+				for (auto index = length; index > 0; --index)
+					values[index-1] = assigner(index-1);
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, V> C>
+			constexpr V assign (C assigner, V value)
+			{
+				for (auto index = length; index > 0; --index)
+					std::tie(values[index-1], value) = assigner(std::move(value));
+				return value;
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, V, std::size_t> C>
+			constexpr V assign (C assigner, V value)
+			{
+				for (auto index = length; index > 0; --index)
+					std::tie(values[index-1], value) = assigner(std::move(value), index-1);
+				return value;
+			}
+
+			template <typename U>
+				requires std::is_convertible<U, T>::value
+			constexpr void assign (U constant)
+			{
+				for (auto index = length; index > 0; --index)
+					values[index-1] = constant;
+			}
+
+			template <BoundedSequence S>
+			constexpr std::tuple<reversed_array_view, reversed_array_view, S> assign (S sequence)
+			{
+				auto folding = fold([&](auto index, auto element)
+				{
+					const auto keepOn = index > 0;
+					if (keepOn) values[index-1] = std::move(element);
+					return std::make_tuple(index - (keepOn ? 1 : 0), keepOn);
+				}, length, std::move(sequence));
+				const auto lastIndex = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding));
+
+				const auto pre = reversed_array_view(values + lastIndex, length - lastIndex);
+				const auto post = reversed_array_view(values, lastIndex);
+				return std::make_tuple(pre, post, std::move(sequence));
+			}
+
+			template <UnboundedSequence S>
+			constexpr S assign (S sequence)
+			{
+				return std::get<1>(fold([&](auto index, auto element)
+				{
+					const auto keepOn = index > 0;
+					if (keepOn) values[index-1] = std::move(element);
+					return std::make_tuple(index-1, keepOn);
+				}, length, std::move(sequence)));
+			}
+
+			/// @}
+
+
+
+			template <Sequence<T> S>
+			constexpr std::tuple<reversed_array_view, reversed_array_view, S> split_prefix (S sequence)
+			{
+				// Returns one before the last failing index and sequence remainings
+				auto folding = fold([&](auto index, auto element)
+				{
+					const auto keepOn = index > 0 and values[index - 1] == element;
+					const auto nextIndex = index - (keepOn ? 1 : 0);
+					return std::make_tuple(nextIndex, keepOn);
+				}, length, std::move(sequence));
+				const auto count = std::get<0>(folding);
+				sequence = std::move(std::get<1>(folding));
+
+				const auto prefix = reversed_array_view(
+				const auto suffix = reversed_array_view(values, count
+			}
 
 	};
 
