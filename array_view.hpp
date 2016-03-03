@@ -861,6 +861,11 @@ namespace stdext
 				return not std::get<1>(folding);
 			}
 
+
+			/// Matching
+			///
+			/// 
+
 			template <BoundedSequence<T> S>
 			constexpr bool match (S elements) const
 			{
@@ -887,152 +892,91 @@ namespace stdext
 
 
 
-			/// Mismatcher
+			// ------------------------------------------------------------------------------------------
+			// Transformation
+
+			/// Transforming
 			///
-			/// The view is tested on how much of its values are shared with \a elements. If only \a
-			/// elements is given, the standard equivalence operator will be used to test on equivalence
-			/// between values of the view and elements in the sequence. If \a matchers is given as well,
-			/// it will be used as equivalence tester. The sharing view, a view on the remaining elements
-			/// and a sequence with the remaining elements will be returned. It will be either tested
-			/// starting at the first value in the view (\a mismatch_prefix) or at the last vlaue in the
-			/// view (\a mismatch_suffix).
+			/// The values in the view will be transformed by \a transformer. The traversion is forward,
+			/// starting with the first value and ending with the last one. An optional \a variable can
+			/// be passed on from transformation to transformation. When a \a variable is passed on, the
+			/// last value of this variable will be returned.
 			///
 			/// @{
 
-			template <Sequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> mismatch_prefix (S elements) const
-			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
-				{
-					const auto keepGoing = index + 1 < limit and values[index] == element;
-					return std::make_tuple(index + (keepGoing ? 1 : 0), keepGoing);
-				}, std::size_t(0), std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				auto prefix = array_view<T>(values, index);
-				auto stem = array_view<T>(values + index, length - index);
-				return std::make_tupe(prefix, stem, std::move(elements));
-			}
-
-			template <Sequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> mismatch_prefix (C matcher, S elements) const
-			{
-				auto state = fold([matcher=std::move(matcher), values=values, limit=length]
-					(auto index, auto element)
-				{
-					const auto keepGoing = index < limit and matcher(values[index], element);
-					return std::make_tuple(index + (keepGoing ? 1 : 0), keepGoing);
-				}, std::size_t(0), std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				auto prefix = array_view(values, index);
-				auto stem = array_view(values + index, length - index);
-				return std::make_tuple(prefix, stem, std::move(elements));
-			}
-
-			template <Sequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> mismatch_suffix (S elements) const
-			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
-				{
-					const auto keepGoing = index > 0 and values[index - 1] == element;
-					return std::make_tuple(index - (keepGoing ? 1 : 0), keepGoing);
-				}, usedLength, std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				auto stem = array_view(values, index);
-				auto suffix = array_view(values + index, length - index);
-				return std::make_tuple(suffix, stem, std::move(elements));
-			}
-
-			template <Sequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> mismatch_suffix (C matcher, S elements) const
-			{
-				auto state = fold([values=values, limit=length](auto index, auto element)
-				{
-					const auto keepGoing = index > 0 and matcher(values[index - a], element);
-					return std::make_tuple(index - (keepGoing ? 1 : 0), keepGoing);
-				}, usedLength, std::move(elements));
-				const auto index = std::get<0>(state);
-				elements = std::move(std::get<1>(state));
-				auto stem = array_view(values, index);
-				auto suffix = array_view(values + index, length - index);
-				return std::make_tuple(suffix, stem, std::move(elements));
-			}
-
-			/// @}
-
-
-
-			// TODO documentation
-			/// Transformation
-			///
-			/// All values in the view are transformed by \a transformer. Different variations exist for
-			/// \a transformer. It either takes 
-			/// @{
-			
 			template <Callable<T, T> C>
 			constexpr void transform (C transformer)
 			{
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = transformer(std::move(values[index]));
 			}
-			
+
 			template <Callable<T, T, std::size_t> C>
 			constexpr void transform (C transformer)
 			{
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = transformer(std::move(values[index]), index);
 			}
-			
+
 			template <typename V, Callable<std::tuple<T, V>, T, V> C>
-			constexpr V transform (C transformer, V value)
+			constexpr V transform (C transformer, V variable)
 			{
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], value) = transformer(std::move(values[index]), std::move(value));
-				return value;
+					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
+				return variable;
 			}
-			
-			template <typename V, Callable<std::tuple<T, V>, T, V, std:size_t> C>
-			constexpr V transform (C transformer, V value)
+
+			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
+			constexpr V transform (C transformer, V variable)
 			{
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], value) = transformer(std::move(values[index]), std::move(value), index);
-				return value;
+					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
+				return variable;
 			}
+
+			/// @}
+
+
+			/// Transforming in reverse
+			///
+			/// The values in the view will be transformed by \a transformer. The traversion is backward
+			/// starting with the last value and ending with the first one. An optional \a variable can
+			/// be passed on from transformation to transformation. When a \a variable is passed on, the
+			/// last value of this variable will be returned.
+			///
+			/// @{
 			
 			template <Callable<T, T> C>
 			constexpr void transform_reverse (C transformer)
 			{
-				for (std::size_t index = length; index > 0; --index)
+				for (auto index = length; index > 0; --index)
 					values[index-1] = transformer(std::move(values[index-1]));
 			}
-			
+
 			template <Callable<T, T, std::size_t> C>
 			constexpr void transform_reverse (C transformer)
 			{
-				for (std::size_t index = length; index > 0; --index)
+				for (auto index = length; index > 0; --index)
 					values[index-1] = transformer(std::move(values[index-1]), index-1);
 			}
-			
-			template <typename V, Callable<std::tuple<T, V>, T, V> C>
-			constexpr V transform_reverse (C transformer, V value)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					std::tie(values[index-1], value) = transformer(std::move(values[index-1]), std::move(value));
-				return value;
-			}
-			
-			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
-			constexpr V transform_reverse (C transformer, V value)
-			{
-				for (std::size_t index = length; index > 0; --index)
-					std::tie(values[index-1], value) = transformer(std::move(values[index-1], std::move(value), index));
-				return value;
-			}
-			
-			/// @}
 
+			template <typename V, Callable<std::tuple<T, V>, T, V> C>
+			constexpr V transform_reverse (C transformer, V variable)
+			{
+				for (auto index = length; index > 0; --index)
+					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable));
+				return variable;
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
+			constexpr V transform_reverse (C transformer, V variable)
+			{
+				for (auto index = length; index > 0; --index)
+					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable), index-1);
+				return variable;
+			}
+
+			/// @}
 
 
 
