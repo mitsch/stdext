@@ -26,8 +26,8 @@ namespace stdext
 	
 		private:
 
-			T * values;
-			std::size_t length;
+			T * values = nullptr;
+			std::size_t length = 0;
 
 
 			/// Insertion sorts elements from index \a begin to \a end
@@ -445,23 +445,6 @@ namespace stdext
 
 
 
-
-			// ------------------------------------------------------------------------------------------
-
-			/// Default constructor
-			///
-			/// An empty view is constructed, that is a view pointing to nullptr and having length zero.
-			constexpr array_view () noexcept
-				: values(nullptr), length(0)
-			{}
-			
-			/// Copy constructor
-			///
-			/// The view from \a other is copied, so both instances see the same elements. Consequently,
-			/// reading with the same parameters will result in the same outcome and writing with one of
-			/// the views will affect the other one.
-			constexpr array_view (const array_view & other) noexcept = default;
-			
 			/// Parameter constructor
 			///
 			/// The view will be on \a values with the next \a count elements. If \a values is nullptr,
@@ -472,20 +455,6 @@ namespace stdext
 				assert(values != nullptr or count == 0);
 			}
 
-			/// Destructor
-			///
-			/// The destructor does nothing; neither destructing its elements nor deallocating the memory.
-			~array_view () = default;
-
-
-			/// Copy assignment
-			///
-			/// The assignment will make the own instance to be a copy of \a other, so both views will
-			/// see the same elements. Consequently, reading with the same parameters will result in the
-			/// same outcome and writing with one of the views will affect the other one. All elements
-			/// of the former view will be uneffected.
-			constexpr array_view& operator = (const array_view & other) = default;
-			
 
 
 			/// Returns whether the view is empty, that is it sees no elements
