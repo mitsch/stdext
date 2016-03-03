@@ -925,6 +925,7 @@ namespace stdext
 			template <Callable<T, T> C>
 			constexpr void transform (C transformer)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = transformer(std::move(values[index]));
 			}
@@ -932,6 +933,7 @@ namespace stdext
 			template <Callable<T, T, std::size_t> C>
 			constexpr void transform (C transformer)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = transformer(std::move(values[index]), index);
 			}
@@ -939,6 +941,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, T, V> C>
 			constexpr V transform (C transformer, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
 				return variable;
@@ -947,6 +950,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
 			constexpr V transform (C transformer, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
 				return variable;
@@ -967,6 +971,7 @@ namespace stdext
 			template <Callable<T, T> C>
 			constexpr void transform_reverse (C transformer)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (auto index = length; index > 0; --index)
 					values[index-1] = transformer(std::move(values[index-1]));
 			}
@@ -974,6 +979,7 @@ namespace stdext
 			template <Callable<T, T, std::size_t> C>
 			constexpr void transform_reverse (C transformer)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (auto index = length; index > 0; --index)
 					values[index-1] = transformer(std::move(values[index-1]), index-1);
 			}
@@ -981,6 +987,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, T, V> C>
 			constexpr V transform_reverse (C transformer, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (auto index = length; index > 0; --index)
 					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable));
 				return variable;
@@ -989,6 +996,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
 			constexpr V transform_reverse (C transformer, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (auto index = length; index > 0; --index)
 					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable), index-1);
 				return variable;
@@ -1012,6 +1020,7 @@ namespace stdext
 			template <Callable<T> C>
 			constexpr void assign (C assigner)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = assigner();
 			}
@@ -1019,6 +1028,7 @@ namespace stdext
 			template <Callable<T, std::size_t> C>
 			constexpr void assign (C assigner)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = assigner(index);
 			}
@@ -1026,6 +1036,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, V> C>
 			constexpr V assign (C assigner, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[index], variable) = assigner(std::move(variable));
 				return variable;
@@ -1034,6 +1045,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
 			constexpr V assign (C assigner, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[index], variable) = assigner(std::move(variable), index);
 				return variable;
@@ -1050,6 +1062,7 @@ namespace stdext
 				requires std::is_convertible<U, T>::value
 			constexpr void assign (U constant)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[index] = constant;
 			}
@@ -1065,6 +1078,7 @@ namespace stdext
 			template <BoundedSequence<T> S>
 			constexpr std::tuple<array_view, array_view, S> assign (S sequence)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto state = fold([values, length](auto index, auto element)
 				{
 					const auto keepOn = index < length;
@@ -1087,6 +1101,7 @@ namespace stdext
 			template <UnboundedSequence<T> S>
 			constexpr S assign (S sequence)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
 				{
 					const auto keepOn = index < length;
@@ -1108,6 +1123,7 @@ namespace stdext
 			template <Callable<T> C>
 			constexpr void assign_reverse (C assigner)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[length - 1 - index] = assigner();
 			}
@@ -1115,6 +1131,7 @@ namespace stdext
 			template <Callable<T, std::size_t> C>
 			constexpr void assign_reverse (C assigner)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[length - 1 - index] = assigner(index);
 			}
@@ -1122,6 +1139,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V>, V> C>
 			constexpr V assign_reverse (C assigner, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[length - 1 - index], variable) = assigner(std::move(variable));
 				return variable;
@@ -1130,6 +1148,7 @@ namespace stdext
 			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
 			constexpr V assign_reverse (C assigner, V variable)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					std::tie(values[length - 1 - index], variable) = assigner(std::move(variable), index);
 				return variable;
@@ -1146,6 +1165,7 @@ namespace stdext
 				requires std::is_convertible<U, T>::value
 			constexpr void assign_reverse (U constant)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[length - 1 - index] = constant;
 			}
@@ -1160,6 +1180,7 @@ namespace stdext
 			template <BoundedSequence<T> S>
 			constexpr std::tuple<array_view, array_view, S> assign_reverse (S sequence)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
 				{
 					const auto keepOn = index > 0;
@@ -1182,6 +1203,7 @@ namespace stdext
 			template <UnboundedSequence<T> S>
 			constexpr S assign_reverse (S sequence)
 			{
+				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
 				{
 					const auto keepOn = index > 0;
