@@ -803,89 +803,107 @@ namespace stdext
 
 
 
-			/// Matcher
+
+
+			// ------------------------------------------------------------------------------------------
+			// Match
+
+			/// Prefix matching
 			///
-			///	The view is tested on having either a matching prefix, suffix or a complete match for all
-			///	values in the view. If only \a elements i given, the standard equivalence operator is
-			///	used to test on equivalence between values in the view and elements in the sequence. If
-			///	\a matcher is given, it will be used as equivalence tester. Matching prefix is tested
-			///	with \a match_prefix, matching suffix is tested with \a match_suffix and matching the
-			/// complete view is tested with \a match.
-			///
-			/// @param elements
-			/// @param matcher
+			/// The view is tested on having \a sequence as its prefix. The first element in \a sequence
+			/// will be matched with the first value in the view. The second element in \a sequence will
+			/// be matched with the second value in the view and so on. Matching is performed either with
+			/// the equivalence operator or with \a matcher.
 			///
 			/// @{
 
 			template <BoundedSequence<T> S>
-			constexpr bool match_prefix (S elements) const
+			constexpr bool match_prefix (S sequence) const
 			{
-				const auto folding = fold([values, length](auto index, auto element)
-				{
-					const auto keepOn = index < length and values[index] == element;
-					return std::make_tuple(index + 1, keepOn);
-				}, std::size_t(0), std::move(elements));
-				return not std::get<1>(folding);
+				const auto splittings = split_prefix(std::move(sequence));
+				return not std::get<2>(splittings);
 			}
 
 			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool match_prefix (C matcher, S elements) const
+			constexpr bool match_prefix (C matcher, S sequence) const
 			{
-				const auto folding = fold([values, length, matcher=std::move(matcher)](auto index, auto element)
-				{
-					const auto keepOn = index < length and matcher(values[index], element);
-					return std::make_tuple(index + 1, keepOn);
-				}, std::size_t(0), std::move(elements));
-				return not std::get<1>(folding);
+				const auto splittings = split_prefix(std::move(matcher), std::move(sequence));
+				return not std::get<2>(splittings);
 			}
 
-			template <BoundedSequence<T> S>
-			constexpr bool match_suffix (S elements) const
-			{
-				const auto folding = fold([values](auto index, auto element)
-				{
-					const auto keepOn = index > 0 and values[index-1] == element;
-					return std::make_tuple(index - 1, keepOn);
-				}, length, std::move(elements));
-				return not std::get<1>(folding);
-			}
-
-			template <BoundedSequence, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool match_suffix (C matcher, S elements) const
-			{
-				const auto folding = fold([values, matcher=std::move(matcher)](auto index, auto element)
-				{
-					const auto keepOn = index > 0 and matcher(values[index-1], element);
-					return std::make_tuple(index - 1, keepOn);
-				}, length, std::move(elements));
-				return not std::get<1>(folding);
-			}
+			/// @}
 
 
-			/// Matching
+			/// Suffix matching
 			///
-			/// 
+			/// The view is tested on having \a sequence as its suffix. The first element in \a sequence
+			/// will be matched with the last value in the view. The second element in \a sequence will
+			/// be matched with the second last value in the view and so on. Matching is performed either
+			/// with the equivalence operator or with \a macher.
+			///
+			/// @{
 
 			template <BoundedSequence<T> S>
-			constexpr bool match (S elements) const
+			constexpr bool match_suffix (S sequence) const
 			{
-				const auto folding = fold([values, length](auto index, auto element)
-				{
-					const auto keepOn = index < length and values[index] == element;
-					return std::make_tuple(index + (keepOn ? 1 : 0), keepOn);
-				}, std::size_t(0), std::move(elements));
-				return std::get<0>(folding) == length and not std::get<1>(folding);
+				const auto splittings = split_suffix(std::move(sequence));
+				return not std::get<2>(splittings);
 			}
 
 			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool match (C matcher, S elements) const
+			constexpr bool match_suffix (C matcher, S sequence) const
 			{
-				const auto folding = fold([values, length, matcher=std::move(matcher)](auto index, auto element)
-				{
-					const auto keepOn = index < length and matcher(values[index], element);
-					return std::make_tuple(index + (keepOn ? 1 : 0), keepOn);
-				}, std::size_t(0), std::move(elements));
-				return std::get<0>(folding) == length and not std::get<1>(folding);
+				const auto splittings = split_suffix(std::move(matcher), std::move(sequence));
+				return not std::get<2>(splittings);
+			}
+
+			/// @}
+
+
+			/// Matching complete view
+			///
+			/// The view is tested on having equal corresponding values with elements in \a sequence. The
+			/// matching is performed within the view in forward direction and within the \a sequence as
+			/// well in forward direction.
+			///
+			/// @{
+
+			template <BoundedSequence<T> S>
+			constexpr bool match (S sequence) const
+			{
+				const auto splittings = split_prefix(std::move(sequence));
+				return std::get<1>(splittings).empty() and not std::get<2>(splittings);
+			}
+
+			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
+			constexpr bool match (C matcher, S sequence) const
+			{
+				const auto splittings = split_prefix(std::move(matcher), std::move(sequence));
+				return std::get<1>(splittings).empty() and not std::get<2>(splittings);
+			}
+
+			/// @}
+
+			/// Matching in reverse complete view
+			///
+			/// The view is tested on having mirrowed corresponding values with elements in \a sequence.
+			/// The matching is performed within the view in backward direction and within the \a
+			/// sequence in forward direction.
+			///
+			/// @{
+
+			template <BoundedSequence<T> S>
+			constexpr bool match_reverse (S sequence) const
+			{
+				const auto splittings = split_suffix(std::move(sequence));
+				return std::get<1>(splittings).empty() and not std::get<2>(splittings);
+			}
+
+			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
+			constexpr bool match_reverse (C matcher, S sequence) const
+			{
+				const auto splittings = split_suffix(std::move(matcher), std::move(sequence));
+				return std::get<1>(splittings).empty() and not std::get<2>(splittings);
 			}
 
 			/// @}
