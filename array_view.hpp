@@ -497,21 +497,27 @@ namespace stdext
 			///
 			/// The index operator accesses the value placed at \a index. Rather applying some functions
 			/// on a range of values, only one value is accessed.
-			/// @{
-
 			constexpr optional<T&> operator [] (std::size_t index)
 			{
 				return index < length ? optional<T&>(values + index) : optional<T&>();
 			}
 
-			constexpr optional<const T&> operator [] (std::size_t index) const
+			/// Accessing
+			///
+			///
+			/// The element at \a index is tried to be accessed. If the \a index is in bound, the
+			/// corresponding value will be passed by reference to \a hitter. If \a index is out of
+			/// bound, \a misser will be called.
+			template <typename C, typename D, typename ... As>
+				requires Callable_<C, T&, As ...> and
+				         Callable_<D, As ...> and
+				         not std::is_void_v<result_of_t<C(T&, As ...)>> and
+				         not std::is_void_v<result_of_t<D(As ...)>> and
+								 requires(){typename std::common_type_t<result_of_t<C(T&, As ...)>, result_of_t<D(As ...)>>}
+			constexpr auto at (C hitter, D misser, std::size_t index, As ... attributes) const
 			{
-				return index < length ? optional<const T&>(values + index) : optional<const T&>();
+				return index < length ? hitter(values[index], std::move(attributes) ...) : misser(std::move(attributes) ...);
 			}
-
-			/// @}
-
-
 
 
 			/// Folding all elements
@@ -655,6 +661,7 @@ namespace stdext
 			}
 			
 			/// @}
+
 
 
 
@@ -1112,6 +1119,7 @@ namespace stdext
 				return std::get<1>(folding);
 			}
 
+
 			/// Assigning in reverse with function
 			///
 			/// All values in the view are assigned a new value by \a assigner. The values will be
@@ -1213,6 +1221,7 @@ namespace stdext
 				}, length, std::move(sequence));
 				return std::get<1>(folding);
 			}
+
 
 
 
