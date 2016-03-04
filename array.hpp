@@ -25,9 +25,22 @@ namespace stdext
 
 			A allocator;
 			allocation_type allocation;
-			std::size_t usedLength = 0;
+			std::size_t used = 0;
 
 
+			/// Requests allocation for \a count values
+			constexpr allocation_type allocate(std::size_t count)
+			{
+				return allocator.template allocate<T>(count);
+			}
+
+			/// Deallocates \a allocation
+			constexpr void deallocate(allocation_type allocation)
+			{
+				allocator.deallocate(allocation);
+			}
+
+			/// Calls destructor for each value, if type \a T is a non trivial object
 			static void destruct (T * values, std::size_t count)
 			{
 				assert(values != nullptr or count == 0);
@@ -37,7 +50,8 @@ namespace stdext
 						values[index].~T();
 				}
 			}
-	
+
+			/// Copies \a count values from \a source to \a destination
 			static void copy (T * destination, const T * source, std::size_t count, Callable_<std::size_t> cleaner)
 			{
 				for (std::size_t index = 0; index < count; ++index)
@@ -129,13 +143,25 @@ namespace stdext
 				return std::make_tuple(allocation, count);
 			}
 
+			template <typename ... As>
+			static constexpr void move_and_construct (T* destination, const T* source, std::size_t count, As&& ... arguments)
+			{
+				assert(std::is_nothrow_move_constructible<T>::value);
+				assert(std::is_nothrow_constructible<T, As ...>::value);
+
+				for (std::size_t index = 0; index < count; ++index)
+					new (destination + index) T(std::move(*(source + index)));
+				new (destination + count) T(std::forward<As>(arguments) ...);
+			}
+
+			template <typename ... As>
+			static constexpr void copy_and_construct (T * destination, const T* source, std::size_t count, As&& ... arguments)
+			{
+				copy(destination, source, count, [&](){});
+			}
+
 		public:
 
-			/// Default constructor
-			///
-			/// The allocator will be constructed by default. No memory allocation will be performed. The
-			/// array will be empty regarding its capacity and hence its values.
-			constexpr array () = default;
 
 			/// Constructor with allocator
 			///
@@ -144,13 +170,7 @@ namespace stdext
 			constexpr explicit array (A allocator) noexcept(std::is_nothrow_move_constructible<A>::value)
 				: allocator(std::move(allocator))
 			{}
-
-			/// Move constructor
-			///
-			/// The allocator and any allocation will be moved from \a other to the newly constructed
-			/// object. All values in \a other will belong to the newly constructed object.
-			constexpr array (array && other) = default;
-
+			
 			/// Move constructor with an array having a different allocator type
 			///
 			/// The allocator will be default constructed. If \a other contains some values, memory will
@@ -193,16 +213,6 @@ namespace stdext
 			/// constructed object.
 			template <Allocator B> constexpr array (array<T, B> && other, A allocator)
 				: array(other.view(), std::move(allocator))
-			{}
-
-			/// Copy constructor
-			///
-			/// The allocator will be copied from the allocator instance of \a other. If \a other
-			/// contains some values, memory will be allocated from the copied allocator object. Values
-			/// from \a other will be copied into the nwly constructed object. The array \a other will
-			/// not e modified in any way.
-			constexpr array (const array & other)
-				: array(other.view(), other.allocator)
 			{}
 
 			/// Copy constructor with arbitrary allocator \a B for array \a other
@@ -285,6 +295,9 @@ namespace stdext
 
 
 
+
+			// ------------------------------------------------------------------------------------------
+			// Assignment
 
 			/// Move assignment
 			///
@@ -402,6 +415,260 @@ namespace stdext
 			}
 
 
+
+			// ------------------------------------------------------------------------------------------
+			// Fill
+
+			/// Constant filling
+			///
+			/// All values in the array will be assigned to \a constant. The traversion is front to back.
+			template <typename U>
+				requires std::is_convertible<U, T>::value
+			constexpr void fill (U constant)
+			{
+				view().fill(std::move(constant));
+			}
+
+			/// Constant filling in reverse
+			///
+			/// All values in the array will be assigned to \a constant. The traversio is back to front.
+			template <typename U>
+				requires std::is_convertible<U, T>::value
+			constexpr void fill_reverse (U constant)
+			{
+				view().fill_reverse(std::move(constant));
+			}
+
+			/// Sequence filling
+			///
+			/// All values in the array will be assigned to their corresponding elements in the \a
+			/// sequence. The remaining of the sequence will be returned. The elements will be filled in
+			/// traversing from the front to the back.
+			template <UnboundedSequence<T> S>
+			constexpr S fill (S sequence)
+			{
+				return view().fill(std::move(sequence));
+			}
+
+			/// Sequence filling in reverse
+			///
+			/// All values in the array will be assigned to their corresponding elements in the \a
+			/// sequence. The remaining of the sequence will be returned. The elements will be filled in
+			/// traversing from the back to the front.
+			template <UnboundedSequence<T> S>
+			constexpr S fill_reverse (S sequence)
+			{
+				return view().fill_reverse(std::mvoe(sequence));
+			}
+
+			/// Partial sequence filling
+			///
+			/// Initial values are assigned to their corresponding elements in the \a sequence. A view
+			/// with the initial filled values, a view with the remaining values, a the remaining
+			/// sequence.
+			template <BoundedSequence<T> S>
+			constexpr std::tuple<array_view<T>, array_view<T>, S> fill (S sequence)
+			{
+				return view().fill(std::move(sequence));
+			}
+
+			/// Partial sequence filling in reverse
+			///
+			/// Tailing values are assigned to their corresponding elements in the \a sequence. A view
+			/// with the tailing filled values, a view with the remaining values, a the remaining
+			/// sequence.
+			template <BoundedSequence<T> S>
+			constexpr std::tuple<array_view<T>, array_view<T>, S> fill_reverse (S sequence)
+			{
+				return view().fill_reverse(std::move(sequence));
+			}
+
+
+	
+			// ------------------------------------------------------------------------------------------
+			// Access
+
+			/// Indexing
+			///
+			/// If \a index is in bound, a refernece to the corresponding value will be returned. If \a
+			/// index is out of bound, an empty optional container will be returned.
+			///
+			/// @{
+
+			constexpr optional<T&> operator [] (std::size_t index)
+			{
+				return make_optional(index < used, [&](){return values[index];});
+			}
+
+			constexpr optional<const T&> operator [] (std::size_t index)
+			{
+				return make_optional(index < used, [&](){return values[index];});
+			}
+
+			/// @}
+
+			/// Accessing
+			///
+			/// Two callable objects, \a hitter and \a misser, are passed on. If \a index is in bound,
+			/// then \a hitter will be called with a reference to the corresponding value and with \a
+			/// arguments. If \a index is out of bound, then \a misser will be called with \a arguments.
+			/// Either way, the result of calling \a hitter or \a misser will be returned.
+			///
+			/// @{
+
+			template <typename C, typename D, typename ... As>
+				requires Callable_<C, T&, As ...> and
+				         Callable_<D, As ...> and
+				         not std::is_void_v<result_of_t<C(T&, As ...)>> and
+				         not std::is_void_v<result_of_t<D(As ...)>> and
+				         requires(){typename std::common_type_t<result_of_t<C(T&, As ...)>, result_of_t<D(As ...)>>}
+			constexpr auto at (C hitter, D misser, std::size_t index, As ... arguments)
+			{
+				return index < length ? hitter(values[index], std::move(arguments) ...) : misser(std::move(arguments) ...);
+			}
+
+			template <typename C, typename D, typename ... As>
+				requires Callable_<C, const T&, As ...> and
+				         Callable_<D, As ...> and
+				         not std::is_void_v<result_of_t<C(const T&, As ...)>> and
+				         not std::is_void_v<result_of_t<D(As ...)>> and
+				         requires(){typename std::common_type_t<result_of_t<C(const T&, As ...)>, result_of_t<D(As ...)>>}
+			constexpr auto at (C hitter, D misser, std::size_t index, As ... arguments) const
+			{
+				return index < length ? hitter(values[index], std::move(arguments) ...) : misser(std::move(arguments) ...);
+			}
+
+			/// @}
+
+
+
+
+
+
+
+
+
+			// ------------------------------------------------------------------------------------------
+			// Modifier
+
+			/// Appending one element
+			///
+			/// One element is appended to the end of the array. The element is constructed with \a
+			/// arguments. If any exception is thrown, the array will leave in its original state.
+			template <typename ... As> void append (As && ... arguments)
+				requires std::is_constructible<T, As ...>::value
+			{
+				// simple case: we have enough space left
+				if (used < allocation.length())
+				{
+					new (allocation.data() + usedLength) T(std::forward<Args>(arguments) ...);
+					usedLength++;
+				}
+				// not enough space
+				else
+				{
+					const auto nextLength = next_length(used + 1);
+					auto newAllocation = allocate(nextLength);
+					if (newAllocation.length() <= used)
+					{
+						deallocate(newAllocation);
+						throw bad_alloc();
+					}
+					else
+					{
+						const auto isNothrowMoveConstructible = std::is_nothrow_move_constructible<T>::value;
+						const auto isNothrowConstructible = std::is_nothrow_constructible<T, As ...>::value;
+						if (isNothrowMoveConstructible and isNothrowConstructible)
+						{
+							for (std::size_t index = 0; index < used; ++index)
+								new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
+							new (newAllocation.data() + used) T(std::forward<As>(arguments) ...);
+						}
+						else
+						{
+							copy(newAllocation.data(), allocation.data(), used, [&](std::size_t index)
+							{
+								destruct(newAllocation.data(), index);
+								deallocate(newAllocation);
+							});
+							try {new (newAllocation.data() + used) T(std::forward<As>(arguments) ...);}
+							catch (...)
+							{
+								destruct(newAllocation.data(), used);
+								deallocate(newAllocation);
+								throw;
+							}
+							destruct(allocation.data(), used);
+						}
+					}
+					deallocate(allocation);
+					newAllocation = allocation;
+					used++;
+				}
+			}
+		
+			/// Appending a sequence of values
+			///
+			/// A sequence of values is appended to the array. If any exception is thrown, the original
+			/// state of the array will be restored.
+			template <BoundedSequence S>
+				requires std::is_constructible<T, sequence_type_t<S>>::value
+			void append (S values)
+			{
+				using value_type = sequence_type_t<S>;
+				const auto  = length(values)
+				constexpr auto value_type_nothrow = std::is_nothrow_constructible<T, value_type>::value;
+				constexpr auto move_nothrow = std::is_nothrow_move_constructible<T>::value;
+				if (usedLength + countedValues <= allocation.length() and value_type_nothrow)
+				{
+					fold([data=allocation.data(), limit=allocation.length()](auto index, auto value)
+					{
+						assert(index < limit);
+						new (data + index) T(std::move(value));
+						return index + 1;
+					}, usedLength, std::move(values));
+					usedLength += countedValues;
+				}
+				else
+				{
+					const auto requiredLength = usedLength + countedValues;
+					const auto desiredLength = align_size(requiredLength);
+					auto newAllocation = allocator.template allocate<T>(desiredLength);
+					if (newAllocation.length() < requiredLength)
+					{
+						allocator.deallocate(newAllocation);
+						throw bad_alloc();
+					}
+					else if (move_nothrow and value_type_nothrow)
+					{
+						for (std::size_t index = 0; index < usedLength; ++index)
+							new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
+						fold([data=newAllocation.data(), requiredLength](auto index, auto value)
+						{
+							assert(index < requiredLength);
+							new (data + index) T(std::move(value));
+							return index + 1;
+						}, usedLength, std::move(values));						
+					}
+					else
+					{
+						copy(newAllocation.data(), allocation.data(), usedLength, [&](std::size_t index)
+						{
+							destruct(newAllocation.data(), index);
+							allocator.deallocate(newAllocation);
+						});
+						copy(newAllocation.data() + usedLength, std::move(values), [&](std::size_t index)
+						{
+							destruct(newAllocation.data(), usedLength + index);
+							allocator.deallocate(newAllocation);
+						});
+						destruct(allocation.data(), usedLength);
+					}
+					allocator.deallocate(allocation);
+					allocation = newAllocation;
+					usedLength = requiredLength;
+				}
+			}
 
 
 
@@ -547,52 +814,6 @@ namespace stdext
 			/// memory will be required to hold all values, new memory will be allocated. If any
 			/// exception is thrown, the precalling state will be restored and the exception will be
 			/// rethrown. The value will be constructed in place.
-			template <typename ... Args> void append (Args && ... arguments)
-				requires std::is_constructible<T, Args ...>::value
-			{
-				if (usedLength + 1 <= allocation.length())
-				{
-					new (allocation.data() + usedLength) T(std::forward<Args>(arguments) ...);
-					usedLength++;
-				}
-				else
-				{
-					auto newAllocation = allocator.template allocate<T>(next_size(usedLength + 1));
-					if (newAllocation.length() < usedLength + 1)
-					{
-						allocator.deallocate(newAllocation);
-						throw bad_alloc();
-					}
-					else if (std::is_nothrow_constructible<T, Args ...>::value)
-					{
-						for (std::size_t index = 0; index < usedLength; ++index)
-							new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
-						new (newAllocation.data() + usedLength) T(std::forward<Args>(arguments) ...);
-					}
-					else
-					{
-						copy(newAllocation.data(), allocation.data(), usedLength, [&](std::size_t index)
-						{
-							destruct(newAllocation.data(), index);
-							allocator.deallocate(newAllocation);
-						});
-						try
-						{
-							new (newAllocation.data() + usedLength) T(std::forward<Args>(arguments) ...);
-						}
-						catch (...)
-						{
-							destruct(newAllocation.data(), usedLength());
-							allocator.deallocate(newAllocation);
-							throw;
-						}
-						destruct(allocation.data(), usedLenght);
-					}
-					allocator.deallocate(allocation);
-					newAllocation = allocation;
-					usedLength++;
-				}
-			}
 
 			/// Appending a sequence of values
 			///
@@ -600,64 +821,6 @@ namespace stdext
 			/// will be the first appended value, the second value in \a values will be the second
 			/// appended value, and so on. If any exception is thrown, the precalling state will be
 			/// restored and the exception will be rethrown.
-			template <BoundedSequence S>
-				requires std::is_constructible<S, sequence_type_t<S>>::value
-			void append (S values)
-			{
-				using value_type = sequence_type_t<decltype(values)>;
-				const auto countedValues = length(values)
-				constexpr auto value_type_nothrow = std::is_nothrow_constructible<T, value_type>::value;
-				constexpr auto move_nothrow = std::is_nothrow_move_constructible<T>::value;
-				if (usedLength + countedValues <= allocation.length() and value_type_nothrow)
-				{
-					fold([data=allocation.data(), limit=allocation.length()](auto index, auto value)
-					{
-						assert(index < limit);
-						new (data + index) T(std::move(value));
-						return index + 1;
-					}, usedLength, std::move(values));
-					usedLength += countedValues;
-				}
-				else
-				{
-					const auto requiredLength = usedLength + countedValues;
-					const auto desiredLength = align_size(requiredLength);
-					auto newAllocation = allocator.template allocate<T>(desiredLength);
-					if (newAllocation.length() < requiredLength)
-					{
-						allocator.deallocate(newAllocation);
-						throw bad_alloc();
-					}
-					else if (move_nothrow and value_type_nothrow)
-					{
-						for (std::size_t index = 0; index < usedLength; ++index)
-							new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
-						fold([data=newAllocation.data(), requiredLength](auto index, auto value)
-						{
-							assert(index < requiredLength);
-							new (data + index) T(std::move(value));
-							return index + 1;
-						}, usedLength, std::move(values));						
-					}
-					else
-					{
-						copy(newAllocation.data(), allocation.data(), usedLength, [&](std::size_t index)
-						{
-							destruct(newAllocation.data(), index);
-							allocator.deallocate(newAllocation);
-						});
-						copy(newAllocation.data() + usedLength, std::move(values), [&](std::size_t index)
-						{
-							destruct(newAllocation.data(), usedLength + index);
-							allocator.deallocate(newAllocation);
-						});
-						destruct(allocation.data(), usedLength);
-					}
-					allocator.deallocate(allocation);
-					allocation = newAllocation;
-					usedLength = requiredLength;
-				}
-			}
 
 
 			/// Prepending a value constructing with \a arguments
@@ -878,7 +1041,276 @@ namespace stdext
 			}
 
 
+			// ------------------------------------------------------------------------------------------
+			// Transformation
 
+			/// Transforming
+			///
+			/// All values in the array will be transformed by \a transformer. The traversal of values
+			/// will be front to back. An optional \a variable can be set. It will be passed from
+			/// traversion to traversion and its final value will be returned.
+			///
+			/// @{
+
+			template <Callable<T, T> C>
+			constexpr void transform (C transformer)
+			{
+				for (std::size_t index = 0; index < used; ++index)
+					values[index] = transformer(std::move(values[index]));
+			}
+
+			template <Callable<T, T, std::size_t> C>
+			constexpr void transform (C transformer)
+			{
+				for (std::size_t index = 0; index < used; ++index)
+					values[index] = transformer(std::move(values[index]), index);
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V> C>
+			constexpr V transform (C transformer, V variable)
+			{
+				for (std::size_t index = 0; index < used; ++index)
+					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
+				return variable;
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
+			constexpr V transform (C transformer, V variable)
+			{
+				for (std::size_t index = 0; index < used; ++index)
+					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
+				return variable;
+			}
+
+			//// @}
+
+			
+			/// Transforming in reverse
+			///
+			/// All values in the array will be transformed by \a transformer. The traversal of values
+			/// will be back to front. An optional \a variable can be set. It will be passed from
+			/// traversion to traversion and its final value will be returned.
+			///
+			/// @{
+
+			template <Callable<T, T> C>
+			constexpr void transform_reverse (C transformer)
+			{
+				for (std::size_t index = used; index > 0; --index)
+					values[index-1] = transformer(std::move(values[index-1]));
+			}
+
+			template <Callable<T, T, std::size_t> C>
+			constexpr void transform_reverse (C transformer)
+			{
+				for (std::size_t index = used; index > 0; --index)
+					values[index-1] = transformer(std::move(values[index-1]), index-1);
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V> C>
+			constexpr V transform_reverse (C transformer, V variable)
+			{
+				for (std::size_t index = used; index > 0; --index)
+					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable));
+				return variable;
+			}
+
+			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
+			constexpr V transform_reverse (C transformer, V variable)
+			{
+				for (std::size_t index = used; index > 0; --index)
+					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable), index-1);
+				return variable;
+			}
+
+			//// @}
+
+
+
+
+
+
+
+
+
+
+
+			// ------------------------------------------------------------------------------------------
+			// Partition
+
+			/// Stable partition
+			///
+			/// All values will be rearranged into two contiguous parts which span the whole array. The
+			/// first part will contain elements which are conform with the \a predictor. The second part
+			/// will contain elements which are not conform with the \a predictor. Within each part,
+			/// every two values will have the same order as before.
+			///
+			/// @param predictor  A callable object which takes a constant reference to some value and
+			///                   returns a boolean indicating whether the value is conform with the
+			///                   predicate or not.
+			///
+			/// @note Time complexity is linear with the length of the array.
+			///
+			template <Callable<bool, const T&> C>
+			constexpr std::tuple<array_view<T>, array_view<T>> partition_stable (C predictor)
+			{
+				return view().partition_stable(std::move(predictor));
+			}
+
+			
+			/// Unstable partition
+			///
+			/// All values will be rearranged into two contiguous parts which span the whole array. The
+			/// first part will contain elements which are conform with the \a predictor. The second part
+			/// will contain elements which are not conform with the \a predictor. It is not guarantied
+			/// that two values in the same part will keep their original order.
+			///
+			/// @param predictor  A callable object which takes a constant reference to some value and
+			///                   returns a boolean indicating whether the value is conform with the
+			///                   predicate or not.			
+			///
+			/// @note Time complexity is linear in the length of the array.
+			///
+			template <Callable<bool, const T&> C>
+			constexpr std::tuple<array_view<T>, array_view<T>> partition (C predictor)
+			{
+				return view().partition(std:move(predictor));
+			}
+
+			
+			/// Partition with random pivot
+			///
+			/// The values will be rearranged into two parts. Each element in the first part will be in
+			/// right order compared with each element in the second part. The order is defined by \a
+			/// comparer, which defines a strict weak order on the values. Both views will be
+			/// individually smaller than the array. The views will be a concatenation of the array. If
+			/// the array is empty, so will be both resulting views. Values will not hold their original
+			/// order.
+			///
+			/// @param comparer  A callable object which takes two constant references to some value of
+			///                  type \a T and returns a boolean indicating whether the two values are in
+			///                  the right order.
+			///
+			/// @note Time complexity is linear in the length of the view.
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
+			{
+				return view().partition_randomly(std::move(comparer));
+			}
+
+
+			///	Sorted partition
+			///
+			/// The values will be rearranged into two parts. The first part will contain all values
+			/// which belong to the top \a count values when sorted with \a comparer. The second part
+			/// will contain all remaining values. These are the bottom \a length - \a count values when
+			/// sorted with \a comparer. The returning views will be contiguous and will span the array
+			/// Values within one part are not guaranteed to have any order in place.
+			///
+			/// @param comparer  A callable object which takes two constant references for some value of
+			///                  type \a T and returns a boolean which indicates if the two values are in
+			///                  right order
+			/// @param count     Amount of values in the first part of the partition
+			///
+			/// @note Time complexity is \a count + (\a length - \a count) log(\a count).
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t count)
+			{
+				return view().partition_sort(std::move(comparer), count);
+			}
+
+
+
+
+
+			// ------------------------------------------------------------------------------------------
+			// Sorting
+
+			/// Prefix sorting
+			///
+			/// The values will be rearranged into two parts. The first part will contain the \a count
+			/// lowest values in sorted order. The second part will contain the remaining values without
+			/// any guarantee of order. The order is defined by \a comparer and must be strict weak. The
+			/// first and second part will be returned as view. If \a count is bigger than \a length(),
+			/// then the whole array will be sorted.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			/// @param count     Length of prefix which should be sorted
+			///
+			/// @note Average time complexity is \doctodo
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view<T>, array_view<T>> sort_prefix (C comparer, std::size_t count)
+			{
+				return view().sort_prefix(std::move(comparer), count);
+			}
+
+			/// Suffix sorting
+			///
+			/// The values will be rearranged into two parts. The first part will contain the \a length()
+			/// - \a count lowest values without any guarantee of order. The second part will contain the
+			/// \a count greatest values in sorted order. The order is defined by \a comparer and must be
+			/// strict weak. The first and second part will be returned as view.
+			///
+			/// @param comparer
+			/// @param count
+			///
+			/// @note Average time complexity is ...
+			/// @note Worst-case time complexity is ...
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr std::tuple<array_view<T>, array_view<T>> sort_suffix (C comparer, std::size_t count)
+			{
+				return view().sort_suffix(std::move(comparer), count);
+			}
+
+			/// Nth element sorting
+			///
+			/// Values will be rearranged into two partitions such that the first part contains the \a n
+			/// lowest values and the second part contains the length() - n - 1 greatest values. The
+			/// first part will be placed at the beginning of the array and the second part will be
+			/// placed at the ending of the array, so that value at index \a n corresponds to the value
+			/// if sorted with \a comparer. The order defined by \a comparer must be strict weak. The
+			/// returning is a tuple of the first part, the value at the \a n th position and the second
+			/// part or an empty optional container, if \a n is equal or greater the array's length.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			///
+			/// @note Average time complexity is ...
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr optional<std::tuple<array_view<T>, T&, array_view<T>>> sort_nth (C comparer, const std::size_t n)
+			{
+				return view().sort_nth(std::move(comparer), n);
+			}
+
+			/// Unstable sorting
+			///
+			/// Values will be sorted according to order defined by \a comparer. The order must be strict
+			/// weak. Previous orders between values are not guaranteed to be kept after sorting.
+			///
+			/// @param comparer  A callable object which takes two constant references of type \a T and
+			///                  returns a boolean indicating if both values are in right order
+			///
+			/// @note Average time complexity is n*log(n) with n being the length of the view.
+			/// @note Worst-case time complexity is 
+			///
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void sort (C comparer)
+			{
+				return view().sort(std::move(comparer));
+			}
+
+			/// Stable sorting
+			template <Callable<bool, const T&, const T&> C>
+			constexpr void sort_stable (C comparer)
+			{
+				return view().sort_stable(std::move(comparer));
+			}
 
 	};
 
