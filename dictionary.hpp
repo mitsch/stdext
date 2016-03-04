@@ -64,7 +64,7 @@ namespace stdext
 						++metaIndex;
 
 					if (metaIndex == startingMetaIndex)
-					{}
+						return std::make_tuple(max, max);
 				}
 			
 				const auto index = indices[metaIndex];
@@ -112,7 +112,7 @@ namespace stdext
 		public:
 
 
-			constexpr optional<V&> operator [] (K key) const
+			constexpr optional<V&> get (K key)
 			{
 				if (used <= L)
 				{
@@ -122,9 +122,59 @@ namespace stdext
 				else
 				{
 					const auto indices = hash_lookup(std::move(key));
-
+					const auto index = std::get<0>(indices);
+					return index == max ? optional<V&>() : optional<V&>(values[index]);
 				}
 			}
+
+			constexpr optional<const V&> get (K key) const
+			{
+				if (used <= L)
+				{
+					const auto index = linear_lookup(std::move(key));
+					return index == used ? optional<const V&>() : optional<const V&>(values[index]);
+				}
+				else
+				{
+					const auto indices = hash_lookup(std::move(key));
+					const auto index = std::get<0>(indices);
+					return index == max ? optional<const V&>() : optional<const V&>(values[index]);
+				}
+			}
+
+			template <Callable<T, T> C>
+			constexpr void transform (C transformer, K key)
+			{
+				if (used <= L)
+				{
+					const auto index = linear_lookup(std::move(key));
+					if (index < used) values[index] = transformer(std::move(values[index]));
+				}
+				else
+				{
+					const auto indices = hash_lookup(std::move(key));
+					const auto index = std::get<0>(indices);
+					if (index != max) values[index] = transformer(std::move(values[index]));
+				}
+			}
+
+			template <Callable<V, const K&, V> C, BoundedSequence<K> S>
+			constexpr void transform (C transformer, S keys)
+			{}
+
+
+
+			constexpr void set (K key, V value);
+			
+			template <BoundedSequence<std::tuple<K, V>> S>
+			constexpr void set (S pairs);
+
+			template <Callable<V, V, V> C>
+			constexpr void set (C merger, K key, V value);
+
+			template <Callable<V, const K&, V, V> C, BoundedSequence<std::tuple<K, V>> S>
+			constexpr void set (C merger, S pairs);
+
 	
 	};
 
