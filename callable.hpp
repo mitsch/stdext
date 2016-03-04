@@ -36,6 +36,9 @@ namespace stdext
 		using type = decltype(invoke<T>()(invoke<Args>() ...));
 	};
 
+	template <typename T>
+	using result_of_t = typename result_of<T>::type;
+
 }
 
 #endif
