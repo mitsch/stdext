@@ -1014,60 +1014,60 @@ namespace stdext
 
 
 			// ------------------------------------------------------------------------------------------
-			// Assignment
+			// Filling
 
-			/// Assigning with function
+			/// Filling with function
 			///
-			/// All values in the view are assigned a new value by \a assigner. The values will be
+			/// All values in the view are assigned a new value by \a filler. The values will be
 			/// traversed front to back. A \a variable can be set to be passed along the assignment. When
 			/// a variable is set, its final value will be returned.
 			///
 			/// @{
 
 			template <Callable<T> C>
-			constexpr void assign (C assigner)
+			constexpr void fill (C filler)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					values[index] = assigner();
+					values[index] = filler();
 			}
 
 			template <Callable<T, std::size_t> C>
-			constexpr void assign (C assigner)
+			constexpr void fill (C filler)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					values[index] = assigner(index);
+					values[index] = filler(index);
 			}
 
 			template <typename V, Callable<std::tuple<T, V>, V> C>
-			constexpr V assign (C assigner, V variable)
+			constexpr V fill (C filler, V variable)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = assigner(std::move(variable));
+					std::tie(values[index], variable) = filler(std::move(variable));
 				return variable;
 			}
 
 			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
-			constexpr V assign (C assigner, V variable)
+			constexpr V fill (C filler, V variable)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = assigner(std::move(variable), index);
+					std::tie(values[index], variable) = filler(std::move(variable), index);
 				return variable;
 			}
 
 			/// @}
 
 			
-			/// Assigning a constant
+			/// Filling with a constant
 			///
 			/// All values in the view will be assigned to \a constant. The values will be traversed
 			/// front to back.
 			template <typename U>
 				requires std::is_convertible<U, T>::value
-			constexpr void assign (U constant)
+			constexpr void fill (U constant)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
@@ -1075,7 +1075,7 @@ namespace stdext
 			}
 
 
-			/// Assigning a bounded sequence
+			/// Filling with a bounded sequence
 			///
 			/// Starting with the first, as many values as possible will be assigned to the corresponding
 			/// element in \a sequence. The values will be traversed from front to back. The returning
@@ -1083,7 +1083,7 @@ namespace stdext
 			/// the remaining values which have been not assigned a new value, and the remaining elements
 			/// in \a sequence.
 			template <BoundedSequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> assign (S sequence)
+			constexpr std::tuple<array_view, array_view, S> fill (S sequence)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto state = fold([values, length](auto index, auto element)
@@ -1100,13 +1100,13 @@ namespace stdext
 				return std::make_tuple(sharing, unsharing, std::move(sequence));
 			}
 
-			/// Assigning an unbounded sequence
+			/// Filling with an unbounded sequence
 			///
 			/// The values in the view will be assigned to the corresponding elements in \a sequence. The
 			/// values will be traversed from front to back. The returning sequence will contain all
 			/// remaining elements of \a sequence.
 			template <UnboundedSequence<T> S>
-			constexpr S assign (S sequence)
+			constexpr S fill (S sequence)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
@@ -1120,65 +1120,65 @@ namespace stdext
 			}
 
 
-			/// Assigning in reverse with function
+			/// Filling in reverse with function
 			///
-			/// All values in the view are assigned a new value by \a assigner. The values will be
+			/// All values in the view are assigned a new value by \a filler. The values will be
 			/// traversed from back to front. A \a variable can be set to be passed along the assignment.
 			/// When a variable is set, its final value will be returned.
 			///
 			/// @{
 
 			template <Callable<T> C>
-			constexpr void assign_reverse (C assigner)
+			constexpr void fill_reverse (C filler)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					values[length - 1 - index] = assigner();
+					values[length - 1 - index] = filler();
 			}
 
 			template <Callable<T, std::size_t> C>
-			constexpr void assign_reverse (C assigner)
+			constexpr void fill_reverse (C filler)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					values[length - 1 - index] = assigner(index);
+					values[length - 1 - index] = filler(index);
 			}
 
 			template <typename V, Callable<std::tuple<T, V>, V> C>
-			constexpr V assign_reverse (C assigner, V variable)
+			constexpr V fill_reverse (C filler, V variable)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[length - 1 - index], variable) = assigner(std::move(variable));
+					std::tie(values[length - 1 - index], variable) = filler(std::move(variable));
 				return variable;
 			}
 
 			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
-			constexpr V assign_reverse (C assigner, V variable)
+			constexpr V fill_reverse (C filler, V variable)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[length - 1 - index], variable) = assigner(std::move(variable), index);
+					std::tie(values[length - 1 - index], variable) = filler(std::move(variable), index);
 				return variable;
 			}
 
 			/// @}
 
 			
-			/// Assigning in reverse a constant
+			/// Filling in reverse with a constant
 			///
 			/// All values in the view will be assigned to \a constant. The values will be traversed
 			/// back to front.
 			template <typename U>
 				requires std::is_convertible<U, T>::value
-			constexpr void assign_reverse (U constant)
+			constexpr void fill_reverse (U constant)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				for (std::size_t index = 0; index < length; ++index)
 					values[length - 1 - index] = constant;
 			}
 
-			/// Assigning in reverse a bounded sequence
+			/// Filling in reverse with a bounded sequence
 			///
 			/// Starting with the last, as many values as possible will be assigned to the corresponding
 			/// element in \a sequence. The values will be traversed from back to front. The returning
@@ -1186,7 +1186,7 @@ namespace stdext
 			/// the remaining values which have been not assigned a new value, and the remaining elements
 			/// in \a sequence.
 			template <BoundedSequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> assign_reverse (S sequence)
+			constexpr std::tuple<array_view, array_view, S> fill_reverse (S sequence)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
@@ -1203,13 +1203,13 @@ namespace stdext
 				return std::make_tuple(sharing, unsharing, std::move(sequence));
 			}
 
-			/// Assigning in reverse an unbounded sequence
+			/// Filling in reverse with an unbounded sequence
 			///
 			/// The values in the view will be assigned to the corresponding elements in \a sequence. The
 			/// values will be traversed from back to front. The returning sequence will contain all
 			/// remaining elements of \a sequence.
 			template <UnboundedSequence<T> S>
-			constexpr S assign_reverse (S sequence)
+			constexpr S fill_reverse (S sequence)
 			{
 				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
 				auto folding = fold([&](auto index, auto element)
