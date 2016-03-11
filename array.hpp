@@ -580,18 +580,48 @@ namespace stdext
 				requires std::is_constructible<T>, sequence_type_t<S>>::value
 			constexpr void prepend (S sequence);
 
+			/// Inserting a value
+			///
+			/// If \a index is less than the current length, a new value at \a index will be constructed
+			/// with \a arguments. All previous values at \a index and above will be shifted up by one.
+			/// If \a index equals the current length or is greater, the new value will be appended. The
+			/// original state of the array will be restored, if any exception is thrown.
 			template <typename ... As>
 				requires std::is_constructible<T, As ...>::value
 			constexpr void insert (std::size_t index, As && ... arguments);
 			
+			/// Inserting a sequence
+			///
+			/// If \a index is less than the current length, a \a sequence of values will be inserted at
+			/// \a index and any previous values at \a index or higher will be shifted up by the length
+			/// of the \a sequence. If \a index is equal or higher the current length, the \a sequence
+			/// will be appended. The original state of the array will be restored, if any exception is
+			/// thrown.
 			template <BoundedSequence S>
 				requires std::is_constructible<T, sequence_type_t<S>>::value
 			constexpr void insert (std::size_t index, BoundedSequence S);
 
+			/// Erasing a single value
+			///
+			/// The value at \a index will be erased and all values above will be shifted down by one. If
+			/// \a index is out of bound (not less the length of the array), nothing will be done. The
+			/// original state of the array will be restored, if any exception is thrown.
 			constexpr void erase (std::size_t index);
 			
+			/// Erasing a range of values
+			///
+			/// All \a count values starting at \a index will be erased from the array and any values
+			/// which are positioned higher will be shifted down by \a count. If \a index is out of bound
+			/// or \a count is too much, they will be adapted. 
 			constexpr void erase (std::size_t index, std::size_t count);
 
+			/// Erasing with a predictor
+			///
+			/// All values for which \a predictor returns will be erased. All remaining values will be
+			/// shifted down such that they will be contiguous. The original state of the array will be
+			/// restored, if any exception is thrown.
+			template <Callable<bool, const T&, std::size_t> C>
+			constexpr void erase (C predictor);
 
 
 
@@ -1499,24 +1529,287 @@ namespace stdext
 	template <typename T, Allocator A>
 	constexpr void array<T, A>::erase (std::size_t index)
 	{
+		constexpr auto isNothrowMoveAssignable = std::is_nothrow_move_assignable<T>::value;
+		constexpr auto isNothrowCopyConstructible = std::is_nothrow_copy_constructible<T>::value;
+
+		if (index < user and isNothrowMoveAssignable)
+		{
+			move_assign(allocation.data() + index, allocation.data() + index + 1, used - index - 1);
+			(allocation.data() + used - 1)->~T();
+			--used;
+		}
+		else if (index < user)
+		{
+			auto newAllocation = allocate(allocation.length());
+
+			if (newAllocation.length() < used - 1)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowCopyConstructible)
+			{
+				copy_construct(newAllocation.data(), allocation.data(), index);
+				copy_construct(newAllocation.data() + index, allocation.data() + index + 1, used - index - 1);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), allocation.data(), index, [&](auto lastIndex)
+				{
+					destruct(newAllocation.data(), lastIndex);
+					deallocate(newAllocation);
+				});
+				copy_construct(newAllocation.data() + index, allocation.data() + index + 1, used - index - 1, [&](auto lastIndex)
+				{
+					destruct(newAllocation.data(), index + lastIndex);
+					deallocate(newAllocation);
+				});
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+			--used;
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------
+	// Erasing range of values
+
+	template <typename T, Allocator A>
+	constexpr void array<T, A>::erase (std::size_t index, std::size_t count)
+	{
+		constexpr auto isNothrowMoveAssignable = std::is_nothrow_move_assignable<T>::value;
+		constexpr auto isNothrowCopyConstructible = std::is_nothrow_copy_constructible<T>::value;
+
+		const auto guarded_count = (index + count > user) ? (user - index) : count;
+		const auto tailing = used - index - guarded_count;
 		
+		if (index < user and tailing == 0)
+		{
+			destruct(allocation.data() + index, guarded_count);
+			used -= guarded_count;
+		}
+		else if (index < user and tailing > 0 and isNothrowMoveAssignable)
+		{
+			move_assign(allocation.data() + index, allocation.data() + index + guarded_count, tailing);
+			destruct(allocation.data() + index + tailing, count);
+			used -= guarded_count;
+		}
+		else if (index < user)
+		{
+			auto newAllocation = allocate(allocation.length());
+
+			if (newAllocation.length() < index + tailing)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowCopyConstructible)
+			{
+				copy_construct(newAllocation.data(), allocation.data(), index);
+				copy_construct(newAllocation.data() + index, allocation.data() + index + guarded_count, tailing);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), allocation.data(), index, [&](auto lastIndex)
+				{
+					destruct(newAllocation.data(), lastIndex);
+					deallocate(newAllocation);
+				});
+				copy_construct(newAllocation.data() + index, allocation.data() + index + guarded_count, tailing,
+					[&](auto lastIndex)
+				{
+					destruct(newAllocation.data(), index + lastIndex);
+					deallocate(newAllocation);
+				});
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+			used -= guarded_count;
+		}
 	}
 
 	// ----------------------------------------------------------------------------------------------
 	// Erasing values marked by a predictor
 
 	template <typename T, Allocator A>
-	template <Callable<bool, const T&> C>
+	template <Callable<bool, const T&, std::size_t> C>
 	constexpr void array<T, A>::erase (C predictor)
 	{
-		
-		
-		const auto count = fold([&predictor](auto count, const T& value)
+		constexpr auto isNothrowMoveAssignable = std::is_nothrow_move_assignable<T>::value;
+		constexpr auto isNothrowCopyConstructible = std::is_nothrow_copy_constructible<T>::value;
+		const auto count = fold([&predictor](auto count, const T& value, std::size_t index)
 		{
-			return count + (predictor(value) ? 1 : 0);
+			return count + (predictor(value, index) ? 1 : 0);
 		}, std::size_t(0));
+		assert(count <= used);
+
+		if (count > 0 and isNothrowMoveAssignable)
+		{
+			std::size_t nextFreeIndex = 0;
+			while (nextFreeIndex < used and predictor(*(allocation.data() + nextFreeIndex), nextFreeIndex))
+				++nextFreeIndex;
+
+			std::size_t index = nextFreeIndex == used ? used : (nextFreeIndex + 1);
+			while (index < used)
+			{
+				if (not predictor(*(allocation.data() + index), index))
+				{
+					*(allocation.data() + nextFreeIndex) = std::move(*(allocation.data() + index));
+					++nextFreeIndex;
+				}
+				++index;
+			}
+
+			destruct(allocation.data() + nextFreeIndex, used - nextFreeIndex);
+		}
+		else if (count > 0)
+		{
+			auto newAllocation = allocate(allocation.length());
+
+			if (newAllocation.length() < used - count)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowCopyConstructible)
+			{
+				std::size_t index = 0;
+				std::size_t newIndex = 0;
+				const auto values = allocation.data();
+
+				while (index < used)
+				{
+					if (not predictor(values[index], index))
+					{
+						new (newAllocation.data() + newIndex) T(values[index]);
+						++newIndex;
+					}
+					++index;
+				}
+			}
+			else
+			{
+				std::size_t index = 0;
+				std::size_t newIndex = 0;
+				const auto values = allocation.data();
+
+				while (index < used)
+				{
+					if (not predictor(values[index], index))
+					{
+						try
+						{
+							new (newAllocation.data() + newIndex) T(values[index]);
+						}
+						catch (...)
+						{
+							destruct(newAllocation.data(), newIndex);
+							deallocate(newAllocation);
+							throw;
+						}
+						++newIndex;
+					}
+					++index;
+				}
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+			used -= count;
+		}
+	}
 
 
+	// ----------------------------------------------------------------------------------------------
+	// Memory shrinkage
+
+	template <typename T, Allocator A>
+	constexpr void array<T, A>::shrink ()
+	{
+		constexpr auto isNothrowMoveConstructible = std::is_nothrow_move_constructible<T>::value;
+		constexpr auto isNothrowCopyConstructible = std::is_nothrow_copy_constructible<T>::value;
+
+		if (used == 0 and allocation.length() > 0)
+		{
+			deallocate(allocation);
+			allocation = allocation_type();
+		}
+		else if (used > 0)
+		{
+			auto newAllocation = allocate(used);
+			
+			if (newAllocation.length() >= allocation.length())
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowMoveConstructible)
+			{
+				move_construct(newAllocation.data(), allocation.data(), used);
+			}
+			else if (isNothrowCopyConstructible)
+			{
+				copy_construct(newAllocation.data(), allocation.data(), used);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), allocation.data(), used, [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+			
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------
+	// Reserving minimum of capacity
+
+	template <typename T, Allocator A>
+	constexpr void array<T, A>::reserve (std::size_t count)
+	{
+		constexpr auto isNothrowMoveConstructible = std::is_nothrow_move_constructible<T>::value;
+		constexpr auto isNothrowCopyConstructible = std::is_nothrow_copy_constructible<T>::value;
+
+		if (count > allocation.length())
+		{
+			auto newAllocation = allocate(count);
+
+			if (newAllocation.length() < count)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowMoveConstructible)
+			{
+				move_construct(newAllocation.data(), allocation.data(), used);
+			}
+			else if (isNothrowCopyConstructible)
+			{
+				copy_construct(newAllocation.data(), allocation.data(), used);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), allocation.data(), used, [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+		}
 	}
 
 }
