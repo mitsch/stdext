@@ -623,6 +623,18 @@ namespace stdext
 			template <Callable<bool, const T&, std::size_t> C>
 			constexpr void erase (C predictor);
 
+			/// Capacity reservation
+			///
+			/// If no expection is thrown, the capacity will be assured to be able to contain at least
+			/// \a count values without any reallocation. If an exception is thrown, the object will
+			/// remain its precalling state.
+			constexpr void reserve (std::size_t count);
+
+			/// Memory shrinkage
+			///
+			/// Memory footprint will be reduced to a minimum. If no value is contained, all memory will
+			/// be deallocated. If no memory can be allocated, the
+			constexpr void shrink ();
 
 
 
@@ -661,95 +673,7 @@ namespace stdext
 			}
 
 			
-			/// Capacity reservation
-			///
-			/// If no expection is thrown, the capacity will be assured to be able to contain at least
-			/// \a count values without any reallocation. If an exception is thrown, the object will
-			/// remain its precalling state.
-			void reserve (std::size_t count)
-			{
-				if (allocation.length() < count)
-				{
-					auto newAllocation = allocator.template allocate<T>(count);
-					if (newAllocation.length() < count)
-					{
-						allocator.deallocate(newAllocation);
-						throw bad_alloc();
-					}
-					else if (std::is_nothrow_move_constructible<T>::value)
-					{
-						for (std::size_t index = 0; index < usedLength; ++index)
-							new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
-					}
-					else
-					{
-						copy(newAllocation.data(), allocation.data(), usedLength, [&](auto index)
-						{
-							destruct(newAllocation.data(), index);
-							allocator.deallocate(newAllocation);
-						});
-						destruct(allocation.data(), usedLength);
-					}
-					allocator.deallocate(allocation);
-					newAllocation = allocation;
-				}
-			}
 
-			/// Memory shrinkage
-			///
-			/// Memory footprint will be reduced to a minimum. If no value is contained, all memory will
-			/// be deallocated. If no memory can be allocated, the
-			void shrink_to_fit ()
-			{
-				if (allocation.length() > 0 and usedLength == 0)
-				{
-					allocator.deallocate(allocation);
-					allocation = allocation_type();					
-				}
-				else if (allocation.length() and usedLength > 0)
-				{
-					auto newAllocation = allocator.template allocate<T>(usedLength);
-					if (newAllocation.length() < usedLength)
-					{
-						allocator.deallocate(newAllocation);
-					}
-					else if (newAllocation.length() >= allocation.length())
-					{
-						allocator.deallocate(newAllocation);
-					}
-					else if (std::is_nothrow_move_constructible<T>::value)
-					{
-						for (std::size_t index = 0; index < usedLength; ++index)
-							new (newAllocation.data() + index) T(std::move(*(allocation.data() + index)));
-						allocator.deallocate(allocation);
-						allocation = newAllocation;
-					}
-					else
-					{
-						bool onSuccess = true;
-						for (std::size_t index = 0; onSuccess and index < usedLength; ++index)
-						{
-							try
-							{
-								new (newAllocation.data() + index) T(*(allocation.data() + index));
-							}
-							catch (...)
-							{
-								destruct(newAllocation.data(), index);
-								allocator.deallocate(newAllocation);
-								onSuccess = false;
-							}
-						}
-
-						if (onSuccess)
-						{
-							destruct(allocation.data(), usedLength);
-							allocator.deallocate(allocation);
-							allocation = newAllocation;
-						}
-					}
-				}
-			}
 
 			friend void swap (array & first, array & second)
 			{
