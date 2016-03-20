@@ -19,6 +19,8 @@ namespace stdext
 	template <typename T, Allocator A = system_allocator> class array
 	{
 
+		template <Allocator B> friend class array<T, B>;
+
 		private:
 
 			using allocation_type = allocation_type_t<A, T>;
@@ -40,6 +42,12 @@ namespace stdext
 				allocator.deallocate(allocation);
 			}
 
+			/// Returns a mutable pointer to the values
+			constexpr T* data ()
+			{
+				return allocation.data();
+			}
+
 			/// Calls destructor for each value, if type \a T is a non trivial object
 			static void destruct (T * values, std::size_t count)
 			{
@@ -51,32 +59,85 @@ namespace stdext
 				}
 			}
 
-			/// Copies \a count values from \a source to \a destination
-			static void copy (T * destination, const T * source, std::size_t count, Callable_<std::size_t> cleaner)
+			/// Constructs \a count value in \a destination by copying instances from \a source
+			/// with an exception \a cleaner
+			static void copy_construct (T* destination, const T* source, std::size_t count, Callable_<std::size_t> cleaner)
 			{
-				for (std::size_t index = 0; index < count; ++index)
+				assert(destination != nullptr or count == 0);
+				assert(source != nullptr or count == 0);
+				assert(destination != source or (count == 0 and destination == nullptr));
+				assert(not (source < destination) or source + count <= destination);
+				assert(not (destination < source) or destination + count <= source);
+
+				std::size_t index = 0;
+				try
 				{
-					try
+					while (index < count)
 					{
-						new (destination + index) T(source[index]);
+						new (destination + index) T(*(source + index));
+						++index;
 					}
-					catch (...)
-					{
-						cleaner(index);
-						throw;
-					}
+				}
+				catch (...)
+				{
+					cleaner(index);
+					throw;
 				}
 			}
 
-			static void copy (T * destination, IndexedBoundedSequence values, Callable_<std::size_t> cleaner)
+			/// Constructs \a count values in \a destination by copying instances from \a source
+			/// without any exception cleaner
+			static void copy_construct (T* destination, const T* source, std::size_t count)
 			{
-				const auto valuesCount = values.length();
-				fold([cleaner=std::move(cleaner), data=destination, limit=valuesCount](auto index, auto value)
+				assert(destination != nullptr or count == 0);
+				assert(source != nullptr or count == 0);
+				assert(destination != source or (count == 0 and destination == nullptr));
+				assert(not (source < destination) or source + count <= destination);
+				assert(not (destination < source) or destination + count <= source);
+
+				for (std::size_t index = 0; index < count; ++index)
+					new (destination + index) T(*(source + index));
+			}
+
+			/// Constructs \a count values in \a destination by moving instances from \a source in
+			/// forward direction
+			static void move_construct (T* destination, T* source, std::size_t count)
+			{
+				assert(destination != nullptr or count == 0);
+				assert(source != nullptr or count == 0);
+				assert(destination != source or (count == 0 and destination == nullptr));
+				assert(not (source < destination) or not (destination < source + count));
+
+				for (std::size_t index = 0; index < count; ++index)
+					new (destination + index) T(std::move(*(source + index)));
+			}
+
+			/// Constructs values in \a destination with elements from \a source without any
+			/// exception cleaner
+			template <BoundedSequence S>
+			static void construct (T* destination, S source)
+			{
+				assert(destination != nullptr);
+				
+				fold([&](auto index, auto element)
 				{
-					assert(index < limit);
+					new (destination + index) T(std::move(element));
+					return index + 1;
+				}, std::size_t(0), std::move(source));
+			}
+
+			/// Constructs values in \a destination with elements from \a source with an exception
+			/// \a cleaner
+			template <BoundedSequence S, Callable_<std::size_t> C>
+			static void construct (T* destination, S source, C cleaner)
+			{
+				assert(destination != nullptr);
+
+				fold([&](auto index, auto element)
+				{
 					try
 					{
-						new (data + index) T(std::move(value));
+						new (destination + index) T(std::move(element));
 					}
 					catch (...)
 					{
@@ -84,74 +145,97 @@ namespace stdext
 						throw;
 					}
 					return index + 1;
-				}, std::size_t(0), std::move(values));
+				}, std::size_t(0), std::move(source));
 			}
 
-			template <Allocator B>
-			static std::tuple<allocation_type, std::size_t> construct (array<T, B> && values, A & allocator)
+			/// Assigns \a count values in \a destination by moving instances from \a source in
+			/// forward direction
+			static void move_assign (T* destination, T* source, std::size_t count)
 			{
-				allocation_type allocation;
-				if (values.length() > 0)
-				{
-					allocation = allocator.template allocate<T>(values.length());
-					if (allocation.length() < values.length())
-					{
-						allocator.deallocate(allocation);
-						throw bad_alloc();
-					}
-					move(allocation.data(), );
-					else if (std::is_nothrow_move_constructible<T>::value)
-					{
-						auto valuesAllocation = values.allocation;
-						for (std::size_t index = 0; index < values.length(); ++index)
-							new (allocation.data() + index) T(std::move(values.))
-					}
-				}
-				return std::make_tuple(allocation, values.length());
-			}
-
-			template <Allocator B>
-			static std::tuple<allocation_type, std::size_t> construct (BoundedSequence<T> values, A & allocator)
-			{
-				allocation_type allocation;
-				const auto count = length(values);
-				if (count > 0)
-				{
-					allocation = allocator.template allocate<T>(count);
-					if (allocation.length() < count)
-					{
-						allocator.deallocate(allocation);
-						throw bad_alloc();
-					}
-					else
-					{
-						fold([allocation=allocation](auto index, auto value)
-						{
-							try
-							{
-								new (allocation.data() + index) T(std::move(value));
-							}
-							catch (...)
-							{
-								destruct(ptr, index);
-								allocator.deallocate(allocation);
-								throw;
-							}
-						}, std::size_t(0), std::move(values))
-					}
-				}
-				return std::make_tuple(allocation, count);
-			}
-
-			template <typename ... As>
-			static constexpr void move_and_append (T* destination, const T* source, std::size_t count, As&& ... arguments)
-			{
-				assert(std::is_nothrow_move_constructible<T>::value);
-				assert(std::is_nothrow_constructible<T, As ...>::value);
+				assert(destination != nullptr or count == 0);
+				assert(source != nullptr or count == 0);
+				assert(destination != source or (count == 0 and destination == nullptr));
+				assert(not (source < destination) or not(destination < source + count));
 
 				for (std::size_t index = 0; index < count; ++index)
-					new (destination + index) T(std::move(*(source + index)));
-				new (destination + count) T(std::forward<As>(arguments) ...);
+					*(destination + index) = std::move(*(source + index));
+			}
+
+			/// Assigns \a count values in \a destination by moving instances from \a source in
+			/// backward direction
+			static void move_assign_reverse (T* destination, T* source, std::size_t count)
+			{
+				assert(destination != nullptr or count == 0);
+				assert(source != nullptr or count == 0);
+				assert(destination != source or (count == 0 and destination == nullptr));
+				assert(not (destination < source) or not (source < destination + count));
+
+				if (count > 0)
+				{
+					do
+					{
+						--count;
+						*(destination + count) = std::move(*(source + count));
+					}
+					while(count > 0);
+				}
+			}
+
+			/// Assigns values in \a destination with elements from \a source without any exception
+			/// cleaner
+			template <BoundedSequence S>
+			static S assign (T* destination, S source)
+			{
+				assert(destination != nullptr or not source);
+
+				auto folding = fold([&](auto index, auto element)
+				{
+					new (destination + index) T(std::move(element));
+					return index + 1;
+				}, std::size_t(0), std::move(source));
+
+				return std::get<1>(folding);
+			}
+
+			/// Assigns values in \a destination with elements from \a source and an exception \a cleaner
+			template <BoundedSequence<T> S, Callable_<std::size_t> C>
+			static S assign (T* destination, S source, C cleaner)
+			{
+				assert(destination != nullptr or not source);
+
+				auto folding = fold([&](auto index, auto element)
+				{
+					try
+					{
+						new (destination + index) T(std::move(element));
+					}
+					catch (...)
+					{
+						cleaner(index);
+						throw;
+					}
+					return index + 1;
+				}, std::size_t(0), std::move(source));
+
+				return std::get<1>(folding);
+			}
+
+			/// Assigns \a count values in \a destination to elements from \a source
+			template <BoundedSequence<T> S>
+			static S assign (T* destination, S source, std::size_t count)
+			{
+				assert(destination != nullptr or count == 0);
+
+				auto folding = fold([&](auto index, auto element)
+				{
+					const auto isInBound = index < count;
+					const auto nextIndex = index + (isInBound ? 1 : 0);
+					if (isInBound) *(destination + index) = std::move(element);
+					return std::make_tuple(nextIndex, isInBound);
+				}, std::size_t(0), std::move(source));
+				assert(std::get<0>(folding) == count);
+
+				return std::get<1>(folding);
 			}
 
 
@@ -162,8 +246,9 @@ namespace stdext
 			///
 			/// The allocator is set to \a allocator. No memory allocation will be performed. The array
 			/// will be empty regarding its capacity and hence its values.
-			constexpr explicit array (A allocator) noexcept(std::is_nothrow_move_constructible<A>::value)
+			constexpr explicit array (A allocator)
 				: allocator(std::move(allocator))
+				noexcept(std::is_nothrow_move_constructible<A>::value)
 			{}
 			
 			/// Move constructor with an array having a different allocator type
@@ -171,35 +256,8 @@ namespace stdext
 			/// The allocator will be default constructed. If \a other contains some values, memory will
 			/// be allocated from its own allocator. Values from \a other will be moved into the newly
 			/// constructed object.
-			template <Allocator B> constexpr array (array<T, B> && other)
-			{
-				if (other.length() > 0)
-				{
-					auto allocation = allocator.template allocate<T>(other.length());
-					if (allocation.length() < other.length())
-					{
-						allocator.deallocate(allocation);
-						throw bad_alloc();
-					}
-					else
-					{
-						const auto count = other.length();
-						other.remove([&](auto value, auto index)
-						{
-							assert(index < count);
-							try { new (allocation.data() + index) T(std::move(value)); }
-							catch (...)
-							{
-								destruct(allocation.data(), index);
-								allocator.deallocate(allocation);
-								throw;
-							}
-						});
-						this->allocation = allocation;
-						usedLength = count;
-					}
-				}
-			}
+			template <Allocator B>
+			constexpr array (array<T, B> && other);
 
 			/// Move constructor with additional \a allocator
 			///
@@ -234,44 +292,32 @@ namespace stdext
 			/// will be allocated from the default constructed allocator. All values in \a values will
 			/// be stored in the newly constructed object.
 			constexpr explicit array (BoundedSequence<T> values)
-			{
-				std::tie(allocation, usedLength) = construct(std::move(values), allocator);
-			}
+				: array(std::move(values), A())
+			{}
 
 			/// Constructor with sequence \a values and \a allocator
 			///
 			/// The allocator will be set to \a allocator. If \a values contains any value, memory will
 			/// be allocated from the allocator. All values in \a values will be stored in the newly
 			/// constructed object.
-			constexpr array (BoundedSequence<T> values, A allocator)
-				: allocator(std::move(allocator))
-			{
-				std::tie(allocation, usedLength) = construct(std::move(values), this->allocator);
-			}
+			constexpr array (BoundedSequence<T> values, A allocator);
 
 			/// Constructor reserving memory for at least \a count values
 			///
 			/// The allocator will be constructed by default. If not enough memory could be allocated,
 			/// the exception \a bad_alloc will be thrown. No value will be constructed.
 			explicit constexpr array (std::size_t count)
-				: usedLength(0)
-			{
-				allocation = allocator.template allocate<T>(count);
-				if (allocation.length() < count)
-				{
-					allocator.deallocate(allocation);
-					throw bad_alloc();
-				}
-			}
+				: array(count, A())
+			{}
 
 			/// Constructor reserving memory for at least \a count values with \a allocator
 			///
 			/// The allocator will be set to \a allocator. If not enough memory could be allocated, the
 			/// exception \a bad_alloc will be thrown. No value will be constructed.
-			constexpr array (std::size_t length, A allocator)
-				: allocator(std::move(allocator)), usedLength(0)
+			constexpr array (std::size_t count, A allocator)
+				: allocator(std::move(allocator))
 			{
-				allocation = this->allocator.template allocate<T>(count);
+				allocation = allocate(count);
 				if (allocation.length() < count)
 				{
 					allocator.deallocate(allocation);
@@ -309,105 +355,16 @@ namespace stdext
 			/// Any value in the own instance will be destructed and all values of \a other will be
 			/// copied. If there is not enough memory, new memory will be allocated. If any exception is
 			/// raised, the precalling state will be restored.
-			template <Allocator B> array& operator = (const array<T, B> & other)
-			{
-				constexpr auto isNothrowCopyable = std::is_nothrow_copy_constructible<T>::value;
-				auto otherView = other.view();
-				if (allocation.length() >= other.length() and isNothrowCopyable)
-				{
-					destruct(allocation.data(), allocation.length());
-					auto combiner = [](auto ptr, const T & value)
-					{
-						new (ptr) T(value);
-						return ptr+1;
-					};
-					otherView.fold(combiner, allocation.data());
-					usedLength = other.length();
-				}
-				else
-				{
-					auto newAllocation = allocator.template allocate<T>(other.length());
-					if (newAllocation.length() < other.length())
-					{
-						allocator.deallocate(newAllocation);
-						throw bad_alloc();
-					}
-					else
-					{
-						auto combiner = [&](auto index, const T& value)
-						{
-							try { new (newAllocation.data() + index) T(value); }
-							catch (...)
-							{
-								destruct(newAllocation.data(), index);
-								allocator.deallocate(newAllocation);
-								throw;
-							}
-							return index + 1;
-						};
-						otherView.fold(combiner, std::size_t(0));
-						destruct(allocation.data(), usedLength);
-						allocator.deallocate(allocation);
-						allocation = newAllocation;
-						usedLength = other.length();
-					}
-				}
-				return *this;
-			}
+			template <Allocator B>
+			array& operator = (const array<T, B> & other);
 
 			/// Sequence assignment
 			///
 			/// Any value in the own instance will be destructed. All \a values will be copied into the
 			/// the own memory allocation. If the allocation is not big enough, new memory will be
 			/// allocated. If any exception is raised, the precalling statei will be restored.
-			array& operator = (BoundedSequence values)
-			{
-				using value_type = sequence_type_t<decltype(values)>;
-				constexpr auto isNothrow = std::is_nothrow_constructible<T, value_type>::value;
-				const auto countValues = length(values);
-				if (allocation.length() >= countValues and isNothrow)
-				{
-					destruct(allocation.data(), allocation.length());
-					auto combiner = [limit=countValues, data=allocation.data()](auto index, auto value)
-					{
-						assert(index < limit);
-						new (data + index) T(std::move(value));
-						return index + 1;
-					};
-					fold(combiner, std::size_t(0), std::move(values));
-					usedLength = countValues;
-				}
-				else
-				{
-					auto newAllocation = allocator.template allocate<T>(countValues);
-					if (newAllocation.length() < countValues)
-					{
-						allocator.deallocate(newAllocation);
-						throw bad_alloc();
-					}
-					else
-					{
-						auto combiner = [limit=countValues, &](auto index, auto value)
-						{
-							assert(index < limit);
-							try { new (newAllocation.data() + index) T(std::move(value)); }
-							catch (...)
-							{
-								destruct(newAllocation.data(), index);
-								allocator.deallocate(newAllocation);
-								throw;
-							}
-							return index + 1;
-						};
-						fold(combiner, std::size_t(0), std::move(values));
-						destruct(allocation.data(), usedLength);
-						allocator.deallocate(allocation);
-						allocation = newAllocation;
-						usedLength = countValues;
-					}
-				}
-				return *this;
-			}
+			array& operator = (BoundedSequence<T> values);
+
 
 
 
@@ -695,67 +652,7 @@ namespace stdext
 			{
 				return index < usedLength ? optional<T>(*(allocation.data() + index)) : optional<T>();
 			}
-
 			
-
-
-			/// Removes all values
-			///
-			/// All values are removed from the sequence and passed on to \a mover. Sidealong, \a value
-			/// is passed through. Depending on \a forward, the values are traversed from front to back
-			/// or from back to front.
-			template <typename V> constexpr V remove (Callable<V, V, T> mover, V value, bool forward)
-			{
-				const auto isNothrow = std::is_nothrow_move_constructible<T>::value;
-				if (isNothrow)
-				{
-					if (forward) for (std::size_t index = 0; index < usedLength; ++index)
-						value = mover(std::move(value), std::move(*(allocation.data() + index)));
-					else for (std::size_t index = usedLength; index > 0; --index)
-						value = mover(std::move(value), std::move(*(allocation.data() + index - 1)));
-				}
-				else
-				{
-					if (forward) for (std::size_t index = 0; index < usedLength; ++index)
-						value = mover(std::move(value), T(*(allocation.data() + index)));
-					else for (std::size_t index = 0; index > 0; --index)
-						value = mover(std::move(value), T(*(allocation.data() + index - 1)));
-					destruct(allocation.data(), usedLength);
-				}
-				usedLength = 0;
-				return value;
-			}
-
-			template <typename V> constexpr V remove (Callable<std::tuple<optional<T>, V>, V, T> mover, V value, bool forward)
-			{
-				const auto isNothrow = std::is_nothrow_move_constructible<T>::value;
-				if (isNothrow and forward)
-				{
-					std::size_t nextIndex = 0;
-					if (forward) for (std::size_t index = 0; index < usedLength; ++index)
-					{
-						auto replacing = move(std::move(value), std::move(*(allocation.data() + index)));
-						value = std::move(std::get<1>(replacing));
-						nextIndex = decide([p=allocation.data()](auto value, auto nextIndex)
-						{
-							
-						}, [](auto nextIndex)
-						{
-							return nextIndex;
-						}, std::move(std::get<0>(replacing)), nextIndex);
-					}
-				}
-			}
-
-			/// Removes a span of values
-			///
-			/// All values starting at index \a pos to inclusively index \a pos + \a count - 1 are
-			/// removed and passed on 
-			template <typename V> constexpr V remove (Callable<V, V, T> mover, V value, std::size_t pos, std::size_t count, bool forward)
-			{
-				
-			}
-
 
 
 			/// Returns view on the values
@@ -1121,7 +1018,7 @@ namespace stdext
 		
 		if (used + count <= allocation.length() and (count == 1 or isNothrowConstructible))
 		{
-			move(allocation.data() + used, std::move(sequence), count);
+			construct(allocation.data() + used, std::move(sequence));
 			used += count;
 		}
 		else
@@ -1137,8 +1034,8 @@ namespace stdext
 			}
 			else if (isNothrowConstructible and isNothrowMoveConstructible)
 			{
-				move(newAllocation.data(), allocation.data(), used);
-				move(newAllocation.data() + used, std::move(sequence), count);
+				move_construct(newAllocation.data(), allocation.data(), used);
+				construct(newAllocation.data() + used, std::move(sequence));
 			}
 			else
 			{
@@ -1148,7 +1045,7 @@ namespace stdext
 					allocator.deallocate(newAllocation);
 				});
 				
-				move(newAllocation.data() + used, std::move(sequence), count, [&](auto index)
+				construct(newAllocation.data() + used, std::move(sequence), [&](auto index)
 				{
 					destruct(newAllocation.data(), used + index);
 					allocator.deallocate(newAllocation);
@@ -1240,7 +1137,7 @@ namespace stdext
 		{
 			move_construct(allocation.data() + count, allocation.data(), used);
 			sequence = move_assign(allocation.data(), std::move(sequence), used);
-			move_construct(allocation.data() + used, std::move(sequence), count - used);
+			construct(allocation.data() + used, std::move(sequence));
 			used += count;
 		}
 		else if (used + count <= allocation.length() and (used == 0 or isNothrowMoveConstructible) and isNothrowMoveAssignable)
@@ -1248,7 +1145,7 @@ namespace stdext
 			const auto gap = used - count;
 			move_construct(allocation.data() + used, allocation.data() + gap, count);
 			move_assign(allocation.data() + count, allocation.data(), gap);
-			move_assign(allocation.data(), std::move(sequence), count);
+			assign(allocation.data(), std::move(sequence));
 			used += count;
 		}
 		else
@@ -1264,12 +1161,12 @@ namespace stdext
 			}
 			else if ((isNothrowMoveConstructible or used == 0) and isNothrowConstructible)
 			{
-				move_construct(newAllocation.data(), std::move(sequence), count);
+				construct(newAllocation.data(), std::move(sequence));
 				move_construct(newAllocation.data() + count, allocation.data(), used);
 			}
 			else
 			{
-				move_construct(newAllocation.data(), std::move(sequence), count, [&](auto index)
+				construct(newAllocation.data(), std::move(sequence), [&](auto index)
 				{
 					destruct(newAllocation.data(), index);
 					allocator.deallocate(newAllocation);
@@ -1383,13 +1280,13 @@ namespace stdext
 
 		if (used + count <= allocation.length() and used <= index and isNothrowConstructible)
 		{
-			move_construct(allocation.data() + used, std::move(sequence), count);
+			construct(allocation.data() + used, std::move(sequence));
 			used += count;
 		}
 		else if (used + count <= allocation.length() and used > index and index + count <= used and isNothrowMoveConstructible and isNothrowConstructible)
 		{
 			move_construct(allocation.data() + index + count, allocation.data() + index, used - index);
-			copy_construct(allocation.data() + index, std::move(sequence), count);
+			construct(allocation.data() + index, std::move(sequence));
 			used += count;
 		}
 		else if (used + count <= allocation.length() and used > index and index + count > used and isNothrowMoveConstructible and isNothrowMoveAssignable and isNothrowConstructible)
@@ -1397,7 +1294,7 @@ namespace stdext
 			const auto offset = index + count;
 			move_construct(allocation.data() + used, allocation.data() + offset, used - offset);
 			copy_construct(allocation.data() + offset, allocation.data() + index, count);
-			copy_construct(allocation.data() + index, std::move(sequence), count);
+			construct(allocation.data() + index, std::move(sequence));
 			used += count;
 		}
 		else
@@ -1413,12 +1310,12 @@ namespace stdext
 			}
 			else if (used == 0 and isNothrowConstructible)
 			{
-				move_construct(newAllocation.data(), std::move(sequence), count);
+				construct(newAllocation.data(), std::move(sequence));
 			}
 			else if (used > 0 and isNothrowCopyConstructible and isNothrowConstructible)
 			{
 				copy_construct(newAllocation.data(), allocation.data(), index);
-				move_construct(newAllocation.data() + index, std::move(sequence), count);
+				construct(newAllocation.data() + index, std::move(sequence));
 				copy_construct(newAllocation.data() + index + count, allocation.data() + index, used - index);
 			}
 			else
@@ -1428,7 +1325,7 @@ namespace stdext
 					destruct(newAllocation.data(), lastIndex);
 					deallocate(newAllocation);
 				});
-				move_construct(newAllocation.data() + index, std::move(sequence), count, [&](auto lastIndex)
+				construct(newAllocation.data() + index, std::move(sequence), [&](auto lastIndex)
 				{
 					destruct(newAllocation.data(), index + lastIndex);
 					deallocate(newAllocation);
@@ -1734,6 +1631,215 @@ namespace stdext
 			deallocate(allocation);
 			allocation = newAllocation;
 		}
+	}
+
+	// ----------------------------------------------------------------------------------------------
+	// Move constructor for array with different allocator type
+
+	template <typename T, Allocator A>
+	template <Allocator B>
+	constexpr array<T, A>::array (array<T, B> && other)
+	{
+		if (other.length() > 0)
+		{
+			const auto requiredLength = other.used;
+			const auto desiredLength = align_length(requiredLength);
+			auto newAllocation = allocate(desiredLength);
+
+			if (newAllocation.length() < requiredLength)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (std::is_nothrow_move_constructible<T>::value)
+			{
+				move_construct(newAllocation.data(), other.data(), requiredLength);
+			}
+			else if (std::is_nothrow_copy_constructible<T>::value)
+			{
+				copy_construct(newAllocaiton.data(), other.data(), requiredLength);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), other.data(), requiredLength, [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+
+			allocation = newAllocation;
+			used = requiredLength;
+		}
+		else
+		{
+			used = 0;
+		}
+	}
+
+
+	// ----------------------------------------------------------------------------------------------
+	// Constructs with a sequence of elements and an allocator
+
+	template <typename T, Allocator A>
+	template <BoundedSequence<T> S>
+	constexpr array<T, A>::array (S elements, A allocator)
+		: allocator(std::move(allocator))
+	{
+		const auto count = length(elements);
+
+		if (count > 0)
+		{
+			auto newAllocation = allocate(count);
+			
+			if (newAllocation.length() < count)
+			{
+				deallocate(newAllocation);
+				throw bad_alloc();
+			}
+			else if (std::is_nothrow_move_constructible<T>::value)
+			{
+				construct(newAllocation.data(), std::move(elements));
+			}
+			else
+			{
+				construct(newAllocation.data(), std::move(elements), [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+			
+			allocation = newAllocation;
+		}
+		used = count;
+	}
+
+
+	// ----------------------------------------------------------------------------------------------
+	// Copy assignment
+
+	template <typename T, Allocator A>
+	template <Allocator B>
+	constexpr array<T, A>& array<T, A>::operator = (const array<T, B> & other)
+	{
+		constexpr auto isNothrowAssign = std::is_nothrow_copy_assignable<T>::value;
+		constexpr auto isNothrowConstruct = std::is_nothrow_copy_constructible<T>::value;
+
+		if (other.used == 0 and used > 0)
+		{
+			destruct(allocation.data(), used);
+			used = 0;
+		}
+		else if (other.used > 0 and used >= other.used and isNothrowAssign)
+		{
+			copy_assign(allocation.data(), other.data(), other.used);
+			destruct(allocation.data() + other.used, used - other.used);
+			used = other.used;
+		}
+		else if (other.used > 0 and allocation.length() >= other.used and used == 0 and isNothrowConstruct)
+		{
+			copy_construct(allocation.data(), other.data(), other.used);
+			used = other.used;
+		}
+		else if (other.used > 0 and allocation.length() >= other.used and used > 0 and isNothrowAssign and isNothrowConstruct)
+		{
+			copy_assign(allocation.data(), other.data(), used);
+			copy_construct(allocation.data() + used, other.data() + used, other.used - used);
+			used = other.used;
+		}
+		else if (other.used > 0)
+		{
+			auto newAllocation = allocate(other.used);
+			if (newAllocation.length() < other.used)
+			{
+				destruct(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowConstruct)
+			{
+				copy_construct(newAllocation.data(), other.data(), other.used);
+			}
+			else
+			{
+				copy_construct(newAllocation.data(), other.data(), other.used, [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+			used = other.used;
+		}
+
+		return *this;
+	}
+
+
+	// ----------------------------------------------------------------------------------------------
+	// Sequence assignment
+
+	template <typename T, Allocator A>
+	template <BoundedSequence<T> S>
+	array<T, A>& array<T, A>::operator = (S elements)
+	{
+		constexpr auto isNothrowAssign = std::is_nothrow_move_assignable<T>::value;
+		constexpr auto isNothrowConstruct = std::is_nothrow_move_constructible<T>::value;
+		const auto count = length(elements);
+
+		if (count == 0 and used > 0)
+		{
+			destruct(allocation.data(), used);
+			used = 0;
+		}
+		else if (count > 0 and used >= count and isNothrowAssign)
+		{
+			assign(allocation.data(), std::move(elements));
+			destruct(allocation.data() + count, used - count);
+			used = count;
+		}
+		else if (count > 0 and allocation.length() >= count and used == 0 and isNothrowConstruct)
+		{
+			construct(allocation.data(), std::move(elements));
+			used = count;
+		}
+		else if (count > 0 and allocation.length() >= count and used > 0 and isNothrowConstruct and isNothrowAssign)
+		{
+			elements = assign(allocation.data(), std::move(elements), used);
+			construct(allocation.data() + used, std::move(elements));
+			used = count;
+		}
+		else if (count > 0)
+		{
+			auto newAllocation = allocate(count);
+			if (newAllocation.length() < count)
+			{
+				destruct(newAllocation);
+				throw bad_alloc();
+			}
+			else if (isNothrowConstruct)
+			{
+				construct(newAllocation.data(), std::move(elements));
+			}
+			else
+			{
+				construct(newAllocation.data(), std::move(elements), [&](auto index)
+				{
+					destruct(newAllocation.data(), index);
+					deallocate(newAllocation);
+				});
+			}
+
+			destruct(allocation.data(), used);
+			deallocate(allocation);
+			allocation = newAllocation;
+			used = count;
+		}
+
+		return *this;
 	}
 
 }
