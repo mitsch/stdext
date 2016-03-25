@@ -54,7 +54,7 @@ namespace stdext
 	}
 
 
-	/// 
+	///
 	template <typename S> concept bool UnboundedSequence ()
 	{
 		return require (S s)
@@ -272,7 +272,62 @@ namespace stdext
 		}, std::size_t(0), std::move(sequence));
 	}
 
+
+
+	/// Filter sequencer for bounded sequences
+	///
+	/// The sequencer filters out all elements which a predictor does not agree on.
+	template <BoundedSequence S, Callable<bool, sequence_type_t<S>> C>
+	class bounded_filter
+	{
+
+	protected:
+
+			S sequence;
+			C predictor;
+
+			std::tuple<optional<value_type>, bool> next (optional<value_type> target, value_type element) const
+			{
+				const auto isFound = not target.empty();
+				if (not isFound and predictor(element))
+				{
+					target = std::move(element);
+				}
+				return std::make_tuple(std::move(target), isFound);
+			}
+
+			std::tuple<value_type, S> tupleise (value_type element, S sequence) const
+			{
+				return std::make_tuple(std::move(element), std::move(sequence))
+			}
+
+	public:
+
+			using value_type = sequence_type_t<S>;
+
+			/// Attribute constructor
+			///
+			/// A bounded filter will be constructed with a \a sequence and a \a predictor.
+			constexpr bounded_filter (S sequence, C predictor) noexcept
+				: sequence(std::move(sequence)), predictor(std::move(predictor))
+			{}
+
+			constexpr optional<std::tuple<value_type, bounded_filter>> decompose () const
+			{
+				auto folding = fold(next, optional<value_type>(), sequence);
+				return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
+			}
+
+			template <typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+			constexpr optional<std::tuple<value_type, bounded_filter>> decompose_reverse () const
+			{
+				auto folding = fold_reverse(next, optional<value_type>(), sequence);
+				return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
+			}
+
+	};
+
+
 }
 
 #endif
-
