@@ -283,47 +283,160 @@ namespace stdext
 
 	protected:
 
-			S sequence;
-			C predictor;
+		S sequence;
+		C predictor;
 
-			std::tuple<optional<value_type>, bool> next (optional<value_type> target, value_type element) const
+		std::tuple<optional<value_type>, bool> next (optional<value_type> target, value_type element) const
+		{
+			const auto isFound = not target.empty();
+			if (not isFound and predictor(element))
 			{
-				const auto isFound = not target.empty();
-				if (not isFound and predictor(element))
-				{
-					target = std::move(element);
-				}
-				return std::make_tuple(std::move(target), isFound);
+				target = std::move(element);
 			}
+			return std::make_tuple(std::move(target), isFound);
+		}
 
-			std::tuple<value_type, S> tupleise (value_type element, S sequence) const
-			{
-				return std::make_tuple(std::move(element), std::move(sequence))
-			}
+		std::tuple<value_type, S> tupleise (value_type element, S sequence) const
+		{
+			return std::make_tuple(std::move(element), std::move(sequence))
+		}
 
 	public:
 
-			using value_type = sequence_type_t<S>;
+		using value_type = sequence_type_t<S>;
 
-			/// Attribute constructor
-			///
-			/// A bounded filter will be constructed with a \a sequence and a \a predictor.
-			constexpr bounded_filter (S sequence, C predictor) noexcept
-				: sequence(std::move(sequence)), predictor(std::move(predictor))
-			{}
+		/// Attribute constructor
+		///
+		/// A bounded filter will be constructed with a \a sequence and a \a predictor.
+		constexpr bounded_filter (S sequence, C predictor) noexcept
+			: sequence(std::move(sequence)), predictor(std::move(predictor))
+		{}
 
-			constexpr optional<std::tuple<value_type, bounded_filter>> decompose () const
+		/// Prefix decomposition
+		///
+		/// If there is any elemnt in the underlying sequence which is conform with the predictor, then
+		/// the next element in the sequence conforming with the predictor will be returned along with a
+		/// sequencer for the succeeding elements of this particular element. If no element in the
+		/// underlying sequence is conform with the predictor, an empty optional container will be
+		/// returned.
+		///
+		constexpr optional<std::tuple<value_type, bounded_filter>> decompose () const
+		{
+			auto folding = fold(next, optional<value_type>(), sequence);
+			return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
+		}
+
+		/// Suffix decomposition
+		///
+		/// If there is any elemnt in the underlying sequence which is conform with the predictor, then
+		/// the last element in the sequence conforming with the predictor will be returned along with a
+		/// sequencer for the preceeding elements of this particular element. If no element in the
+		/// underlying sequence is conform with the predictor, an empty optional container will be
+		/// returned.
+		///
+		/// @note This method is only enabled for reversible bounded sequences.
+		///
+		template <typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+		constexpr optional<std::tuple<value_type, bounded_filter>> decompose_reverse () const
+		{
+			auto folding = fold_reverse(next, optional<value_type>(), sequence);
+			return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
+		}
+
+		/// Emptiness testing
+		///
+		/// The underlying sequence of \a sequencer will be tested on having no element which is
+		/// conforming with the predictor.
+		friend constexpr bool empty (const bounded_filter & sequencer)
+		{
+			auto folding = fold([&sequencer.predictor](auto, auto element)
 			{
-				auto folding = fold(next, optional<value_type>(), sequence);
-				return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
-			}
+				const auto isConforming = sequencer.predictor(element);
+				return std::make_tuple(not isConforming, not isConforming);
+			}, true, sequencer.sequence);
+			return std::get<0>(folding);
+		}
 
-			template <typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
-			constexpr optional<std::tuple<value_type, bounded_filter>> decompose_reverse () const
+		/// Length
+		///
+		/// The amount of conforming elements in the underlying sequence of \a sequencer will be
+		/// computed.
+		///
+		friend constexpr size_t length (const bounded_filter & sequencer)
+		{
+			return fold([&sequencer.predictor](auto count, auto element)
 			{
-				auto folding = fold_reverse(next, optional<value_type>(), sequence);
-				return fmap(tupleise, std::move(std::get<0>(folding)), std::move(std::get<1>(folding)));
-			}
+				return count + predictor(element) ? 1 : 0;
+			}, size_t(0), sequencer.sequence);
+		}
+
+		/// Complete forward folding
+		///
+		/// All conforming elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding process will be returned. The traversal direction is front to
+		/// back.
+		///
+		template <typename V, Callable<V, V, value_type> C>
+		friend constexpr V fold (C combiner, V value, bounded_filter sequencer)
+		{
+			return fold([&sequencer.predictor](V value, auto element)
+			{
+				return sequencer.predictor(element) ? combiner(std::move(value), std::move(element)) : value;
+			}, std::move(value), std::move(sequencer.sequence));
+		}
+
+		/// Partial forward folding
+		///
+		/// Initial conforming elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding process will be returned along with a sequencer for the succeeding
+		/// elements. The traversal direction is front to back. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C>
+		friend constexpr std::tuple<V, bounded_filter> fold (C combiner, V value, bounded_filter sequencer)
+		{
+			auto folding = fold([&sequencer.predictor, &combiner](auto value, auto element)
+			{
+				return sequencer.predictor(element) ? combiner(std::move(value), std::move(element)) : std::make_tuple(std::move(value), true);
+			}, std::move(value), std::move(sequencer.sequence));
+			return std::make_tuple(std::move(std::get<0>(folding)), bounded_filter(std::move(std::get<1>(folding)), sequencer.predictor));
+		}
+
+		/// Complete backward folding
+		///
+		/// All conforming elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding process will be returned. The traversal direction is back to
+		/// front.
+		///
+		/// @note This method is only enabled for reversible bounded sequences.
+		///
+		template <typename V, Callable<V, V, value_type> C, typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+		friend constexpr V fold_reverse (C combiner, V value, bounded_filter sequencer)
+		{
+			return fold_reverse([&sequencer.predictor](auto value, auto element)
+			{
+				return sequencer.predictor(element) ? combiner(std::move(value), std::move(element)) : value;
+			}, std::move(value), std::move(sequencer.sequence));
+		}
+
+		/// Partial backward folding
+		///
+		/// Tailing conforming elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding process will be returned along with a sequencer for the preceeding
+		/// elements. The traversal direction is back to front. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		/// @note This method is only enabled for reversible bounded sequences.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C, typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+		friend constexpr std::tuple<V, bounded_filter> fold_reverse (C combiner, V value, bounded_filter sequencer)
+		{
+			auto folding = fold_reverse([&sequencer.predictor, &combiner](auto value, auto element)
+			{
+				return sequencer.predictor(element) ? combiner(std::move(value), std::move(element)) : std::make_tuple(std::move(value), true);
+			}, std::move(value), std::move(sequencer.sequence));
+			return std::make_tuple(std::move(std::get<0>(folding)), bounded_filter(std::move(std::get<1>(folding)), sequencer.predictor));
+		}
 
 	};
 
