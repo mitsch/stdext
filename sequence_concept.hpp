@@ -655,7 +655,61 @@ namespace stdext
 
 
 
+	/// Unbounded transform sequencer
+	///
+	/// Elements of the underlying sequence will be transformed into new values.
+	template <UnboundedSequence S, Callable_<sequence_type_t<S>> C>
+	class unbounded_transformer
+	{
 
+	private:
+
+		S sequence;
+		C transformer;
+
+	public:
+
+		/// Value type of a single transformation
+		using value_type = result_of_t<C(sequence_type_t<S>)>;
+
+		/// Attribute constructor
+		///
+		/// The unbounded transform sequencer will be constructed with \a sequence and \a transformer.
+		///
+		constexpr unbounded_transformer (S sequence, C transformer)
+			noexcept(std::is_nothrow_move_constructible<S>::value and std::is_nothrow_move_constructible<C>::value)
+			: sequence(std::move(sequence)), transformer(std::move(transformer))
+		{}
+
+		/// Prefix decomposition
+		///
+		/// The transformation of the next element in the held sequence will be returned along with a
+		/// sequencer for the succeeding elements.
+		///
+		constexpr std::tuple<value_type, unbounded_transformer> decompose () const
+		{
+			auto decomposition = sequence.decompose();
+			return std::make_tuple(transformer(std::move(std::get<0>(decomposition))), unbounded_transformer(std::move(std::get<1>(decomposition)), transformer));
+		}
+
+		/// Partial forward folding
+		///
+		/// Initial transformed elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding will be returned along with a sequencer for the succeeding
+		/// elements. The traversal direction is front to back. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C>
+		friend constexpr std::tuple<V, unbounded_transformer> fold (C combiner, V value, unbounded_transformer sequencer)
+		{
+			auto folding = fold([&sequencer.transformer, &combiner](auto value, auto element)
+			{
+				return combiner(std::move(value), sequencer.transformer(std::move(element)));
+			}, std::move(value), std::move(sequencer.sequence));
+			return std::make_tuple(std::move(std::get<0>(folding)), unbounded_transformer(std::move(std::get<1>(folding)), sequencer.transformer));
+		}
+
+	};
 
 }
 
