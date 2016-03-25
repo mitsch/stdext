@@ -507,7 +507,155 @@ namespace stdext
 
 
 
-	
+	/// Bounded transform sequencer
+	///
+	/// The bounded transform sequencer maps each element in the held sequence to another value of
+	/// some type.
+	template <BoundedSequence S, Callable_<sequence_type_t<S>> C>
+	class bounded_transformer
+	{
+
+	private:
+
+		S sequence;
+		C transformer;
+
+	public:
+
+		/// value type of transformation
+		using value_type = result_of_t<C(sequence_type_t<S>)>;
+
+		/// Attribute constructor
+		///
+		/// The bounded transform sequencer will be constructed with the underlying \a sequence and the
+		/// \a transformer which transforms a single element of \a sequence into another value.
+		///
+		constexpr bounded_transformer (S sequence, C transformer)
+			noexcept(std::is_nothrow_move_constructible<S>::value and std::is_nothrow_move_constructible<C>::value)
+			: sequence(std::move(sequence)), transformer(std::move(transformer))
+		{}
+
+		/// Prefix decomposition
+		///
+		/// If the underlying sequence is not empty, then the transformation of the next element along
+		/// with a sequencer for the succeeding elements will be returned. If the underlying sequence is
+		/// empty, an empty optional container will be returned.
+		///
+		constexpr optional<std::tuple<value_type, bounded_transformer>> decompose () const
+		{
+			return fmap([&transformer](auto decomposition)
+			{
+				return std::make_tuple(transformer(std::move(std::get<0>(decomposition))), bounded_transformer(std::move(std::get<1>(decomposition)), transformer));
+			}, sequence.decompose());
+		}
+
+		/// Suffix decomposition
+		///
+		/// If the underlying sequence is not empty, then the transformation of the last element along
+		/// with a sequencer for the preceeding elements will be returned. If the underlying sequence is
+		/// empty, an empty optional container will be returned.
+		///
+		/// @note This method is only enabled if the underlying sequence is reversible.
+		///
+		template <typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+		constexpr optional<std::tuple<value_type, bounded_transformer>> decompose_reverse () const
+		{
+			return fmap([&transformer](auto decomposition)
+			{
+				return std::make_tuple(transformer(std::move(std::get<0>(decomposition))), bounded_transformer(std::move(std::get<1>(decomposition)), transformer));
+			}, sequence.decompose_reverse());
+		}
+
+		/// Emptiness
+		///
+		/// The underlying sequence of \a sequencer will be tested to have no elements left.
+		///
+		friend constexpr bool empty (const bounded_transformer & sequencer)
+		{
+			return empty(sequencer.sequence);
+		}
+
+		/// Length
+		///
+		/// The length of the underlying sequence \a sequencer will be returned as it refers to the
+		/// amount of elements in \a sequencer.
+		///
+		friend constexpr size_t length (const bounded_transformer & sequencer)
+		{
+			return length(sequencer.sequence);
+		}
+
+		/// Complete forward folding
+		///
+		/// All transformed elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding will be returned. The traversal direction is front to back.
+		///
+		template <typename V, Callable<V, V, value_type> C>
+		friend constexpr V fold (C combiner, V value, bounded_transformer sequencer)
+		{
+			return fold([&sequencer.transformer, &combiner](auto value, auto element)
+			{
+				return combiner(std::move(value), sequencer.transformer(std::move(element)));
+			}, std::move(value), std::move(sequencer.sequence));
+		}
+
+		/// Partial forward folding
+		///
+		/// Initial transformed elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding will be returned along with a sequencer for the succeeding
+		/// elements. The traversal direction is front to back. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C>
+		friend constexpr std::tuple<V, bounded_transformer> fold (C combiner, V value, bounded_transformer sequencer)
+		{
+			auto folding = fold([&sequencer.transformer, &combiner](auto value, auto element)
+			{
+				return combiner(std::move(value), sequencer.transformer(std::move(element)));
+			}, std::move(value), std::move(sequencer.sequence));
+			return std::make_tuple(std::move(std::get<0>(folding)), bounded_transformer(std::move(std::get<1>(folding)), sequencer.transformer));
+		}
+
+		/// Complete backward folding
+		///
+		/// All transformed elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding will be returned. The traversal direction is back to front.
+		///
+		/// @note This method is only enabled for held sequences which are reversible.
+		///
+		template <typename V, Callable<V, V, value_type> C, typename=typename std::enable_if<ReversibleBoundedSequence<S>>::type>
+		friend constexpr V fold_reverse (C combiner, V value, bounded_transformer sequencer)
+		{
+			return fold_reverse([&sequencer.transformer, &combiner](auto value, auto element)
+			{
+				return combiner(std::move(value), sequencer.transformer(std::move(element)));
+			}, std::move(value), std::move(sequencer.sequence));
+		}
+
+		/// Partial backward folding
+		///
+		/// Tailing transformed elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding will be returned along with a sequencer for the preceeding
+		/// elements. The traversal direction is back to front. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		/// @note This method is only enabled for held sequences which are reversible.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C>
+		friend constexpr std::tuple<V, bounded_transformer> fold_reverse (C combiner, V value, bounded_transformer sequencer)
+		{
+			auto folding = fold_reverse([&sequencer.transformer, &combiner](auto value, auto element)
+			{
+				return combiner(std::move(value), sequencer.transformer(std::move(element)));
+			}, std::move(value), std::move(sequencer.sequence));
+			return std::make_tuple(std::move(std::get<0>(folding)), bounded_transformer(std::move(std::get<1>(folding)), sequencer.transformer));
+		}
+
+	};
+
+
+
+
 
 }
 
