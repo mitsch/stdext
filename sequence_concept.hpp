@@ -441,6 +441,74 @@ namespace stdext
 	};
 
 
+
+
+	/// Unbounded filter sequencer
+	///
+	/// The unbounded filter sequencer takes only elements which are conform with a predictor.
+	template <UnboundedSequence S, Callable<bool, sequence_type_t<S>> C>
+	class unbounded_filter
+	{
+
+	private:
+
+		S sequence;
+		C predictor;
+
+	public:
+
+		/// underlying sequence type
+		using value_type = sequence_type_t<S>;
+
+		/// Attribute constructor
+		///
+		/// An unbounded filter sequencer will be constructed with the underlying \a sequence and the \a
+		/// predictor.
+		constexpr unbounded_filter (S sequence, C predictor)
+			noexcept(std::is_nothrow_move_constructible<S>::value and std::is_nothrow_move_constructible<C>::value)
+			: sequence(std::move(sequence)), predictor(std::move(predictor))
+		{}
+
+		/// Prefix decomposition
+		///
+		/// The next conforming element in the underlying sequence will be returned along with a
+		/// sequencer for the succeeding elements. If no element in the sequence is conforming with the
+		/// predictor, the method will be trapped into an endless loop.
+		///
+		constexpr std::tuple<value_type, unbounded_filter> decompose () const
+		{
+			auto folding = fold([&predictor](auto, auto element)
+			{
+				return std::make_tuple(int(0), not predictor(element));
+			}, int(0), sequence);
+			auto decomposition = std::get<1>(folding).decompose();
+			return std::make_tuple(std::move(std::get<0>(decomposition)), unbounded_filter(std::move(std::get<1>(decomposition)), predictor));
+		}
+
+		/// Partial folding
+		///
+		/// Initial conforming elements in \a sequencer will be folded over \a value by \a combiner. The
+		/// final value of the folding process will be returned along with a sequencer for the succeeding
+		/// elements. The traversal direction is front to back. The folding stops with the first false
+		/// flag returned by \a combiner.
+		///
+		template <typename V, Callable<std::tuple<V, bool>, V, value_type> C>
+		friend constexpr std::tuple<V, unbounded_filter> fold (C combiner, V value, unbounded_filter sequencer)
+		{
+			auto folding = fold([&sequencer.predictor](auto value, auto element)
+			{
+				return sequencer.predictor(element) ? combiner(std::move(value), std::move(element)) : std::make_tuple(std::move(value), true);
+			}, std::move(value), std::move(sequencer.sequence);
+			return std::make_tuple(std::move(std::get<0>(folding)), unbounded_filter(std::move(std::get<1>(folding)), sequencer.predictor));
+		}
+
+	};
+
+
+
+
+	
+
 }
 
 #endif
