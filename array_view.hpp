@@ -604,864 +604,694 @@ namespace stdext
 
 
 
+
+
 		/// Prefix splitting with count
 		///
-		/// The view will be splitted into two partitions. 
-		/// If the view has more than \a count values, a view with the first \a count and a view with the
-		/// the remaining values will be returned. If the view has less or equal \a count values, then the
+		/// The view will be splitted into two partitions. If the view has more than \a count values, the
+		/// first partition will hold the first \a count values and the second partition will hold all
+		/// succeeding values of the view. If the view has equal or less than \a count values, then the
+		/// first partition will correspond to the view and the second partition will be empty.
+		///
+		constexpr std::tuple<array_view, array_view> split_prefix (size_t count) const
+		{
+			const auto maxCount = count < length ? count : length;
+			const auto pre = array_view(values, maxCount);
+			const auto post = array_view(values + maxCount, length - maxCount);
+			return std::make_tuple(pre, post);
+		}
 
-
-
-			/// Prefix matching
-			///
-			/// The view will be tested on having \a sequence as its prefix. The first element in \a
-			/// sequence will be matched with the first value in the view. The second element in \a
-			/// sequence will be matched with the second value in the view and so on. Matching is
-			/// performed either with the equivalence operator or with \a matcher.
-			///
-			/// @{
-			///
-			template <BoundedSequence<T> S>
-			constexpr bool match_prefix (S sequence) const
+		/// Prefix splitting with prediction
+		///
+		/// The view will be splitted into two partitions. The first partition will be the longest prefix
+		/// of values in the view for which \a predictor returns true. The second partition will hold all
+		/// succeeding values of the view.
+		///
+		template <Callable<bool, T> C>
+		constexpr std::tuple<array_view, array_view> split_prefix (C predictor) const
+		{
+			auto index = size_t(0);
+			while (index < length and predictor(values[index]))
 			{
-				const auto splitting = split_prefix(std::move(sequence));
-				return not std::get<2>(splitting);
+				++index;
 			}
+			const auto pre = array_view(values, index);
+			const auto post = array_view(values + index, length - index);
+			return std::make_tuple(pre, post);
+		}
 
-			template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr bool match_prefix (C matcher, S sequence) const
+		/// Prefix splitting with sequence
+		///
+		/// The view will be splitted into two partitions. The first partition will be the longest
+		/// sharing prefix with \a sequence and the second partition will be the succeeding values of the
+		/// view. Along with both partitions, a sequence with the remaining elements will be returned.
+		///
+		template <Sequence<T> S>
+		constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
+		{
+			auto folding = fold([&values](auto index, auto element)
 			{
-				const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
-				return not std::get<2>(splitting);
+				const auto keepOn = index < length and values[index] == element;
+				const auto nextIndex = index + keepOn ? 1 : 0;
+				return std::make_tuple(nextIndex, keepOn);
+			}, size_t(0), std::move(sequence));
+			const auto pre = array_view(values, std::get<0>(folding));
+			const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
+			return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
+		}
+
+		/// Prefix splitting with sequence and matcher
+		///
+		/// The view will be splitted into two partitions. The first partition will be the longest
+		/// sharing prefix with \a sequence and the second partition will be the succeeding values of the
+		/// view. Along with both partitions, a sequence with the remaining elements will be returned.
+		/// The values of the view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <Sequence S, Callable<bool, T, value_type> C>
+		constexpr std::tuple<array_view, array_view, S> split_prefix (C matcher, S sequence) const
+		{
+			auto folding = fold([&values, &matcher](auto index, auto element)
+			{
+				const auto keepOn = index < length and matcher(values[index], element);
+				const auto nextIndex = index + keepOn ? 1 : 0;
+				return std::make_tuple(nextIndex, keepOn);
+			}, size_t(0), std::move(sequence));
+			const auto pre = array_view(values, std::get<0>(folding));
+			const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
+			return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
+		}
+
+
+
+
+
+
+		/// Suffix splitting with count
+		///
+		/// The view will be splitted into two partitions. If the view has more than \a count values, the
+		/// second partition will hold the last \a count values and the first partition will hold all
+		/// preceeding values of the view. If the view has equal or less than \a count values, then the
+		/// second partition will correspond to the view and the first partition will be empty.
+		///
+		constexpr std::tuple<array_view, array_view> split_suffix (size_t count) const
+		{
+			const auto maxOffset = count < length ? (length - count) : 0;
+			const auto pre = array_view(values, maxOffset);
+			const auto post = array_view(values + maxOffset, length - maxOffset);
+			return std::make_tuple(pre, post);
+		}
+
+		/// Suffix splitting with prediction
+		///
+		/// The view will be splitted into two partitions. The second partition will be the longest
+		/// suffix of values in the view for which \a predictor returns true. The first partition will
+		/// hold all preceeding values of the view.
+		///
+		template <Callable<bool, T> C>
+		constexpr std::tuple<array_view, array_view> split_suffix (C predictor) const
+		{
+			auto index = length;
+			while (index > 0 and predictor(values[index-1]))
+			{
+				--index;
 			}
-			/// @}
+			const auto pre = array_view(values, index);
+			const auto post = array_view(values + index, length - index);
+			return std::make_tuple(pre, post);
+		}
 
-
-			/// Suffix matching
-			///
-			/// The view will be tested on having \a sequence as its suffix. The first element in \a
-			/// sequence will be matched with the last value in the view. The second element in \a
-			/// sequence will be matched with the second last value in the view and so on. Matching is
-			/// performed either with the equivalence operator or with \a macher.
-			///
-			/// @{
-			///
-			template <BoundedSequence<T> S>
-			constexpr bool match_suffix (S sequence) const
+		/// Suffix splitting with sequence
+		///
+		/// The view will be splitted into two partitions. The second partition will be the longest
+		/// sharing suffix with \a sequence and the first partition will be the preceeding values of the
+		/// view. Along with both partitions, a sequence with the preceeding elements will be returned.
+		///
+		template <ReversibleBoundedSequence<T> S>
+		constexpr std::tuple<array_view, array_view, S> split_suffix (S sequence) const
+		{
+			auto folding = fold_reverse([&values](auto index, auto element)
 			{
-				const auto splitting = split_suffix(std::move(sequence));
-				return std::get<2>(splitting).empty();
+				const auto keepOn = index > 0 and values[index-1] == element;
+				const auto nextIndex = index - keepOn ? 1 : 0;
+				return std::make_tuple(nextIndex, keepOn);
+			}, length, std::move(sequence));
+			const auto pre = array_view(values, std::get<0>(folding));
+			const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
+			return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
+		}
+
+		/// Suffix splitting with sequence and matcher
+		///
+		/// The view will be splitted into two partitions. The second partition will be the longest
+		/// sharing suffix with \a sequence and the first partition will be the preceeding values of the
+		/// view. Along with both partitions, a sequence with the preceeding elements will be returned.
+		/// The values of the view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <ReversibleBoundedSequence S, Callable<bool, T, value_type> C>
+		constexpr std::tuple<array_view, array_view, S> split_suffix (C matcher, S sequence) const
+		{
+			auto folding = fold_reverse([&values, &matcher](auto index, auto element)
+			{
+				const auto keepOn = index > 0 and matcher(values[index-1], element);
+				const auto nextIndex = index - keepOn ? 1 : 0;
+				return std::make_tuple(nextIndex, keepOn);
+			}, size_t(0), std::move(sequence));
+			const auto pre = array_view(values, std::get<0>(folding));
+			const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
+			return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
+		}
+
+
+
+
+		/// Prefix matching with sequence
+		///
+		/// The view will be tested on having \a sequence as its prefix. Matching is performed with the
+		/// equivalence operator.
+		///
+		template <BoundedSequence<T> S>
+		constexpr bool match_prefix (S sequence) const
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Prefix matching with sequence and matcher
+		///
+		/// The view will be tested on having \a sequence as its prefix. Matching is performed with \a
+		/// matcher.
+		///
+		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool match_prefix (C matcher, S sequence) const
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Suffix matching with sequence
+		///
+		/// The view will be tested on having \a sequence as its suffix. Matching is performed with the
+		/// equivalence operator.
+		///
+		template <ReversibleBoundedSequence<T> S>
+		constexpr bool match_suffix (S sequence) const
+		{
+			const auto splitting = split_suffix(std::move(sequence));
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Suffix matching with sequence and matcher
+		///
+		/// The view will be tested on having \a sequence as its suffix. Matching is performed with \a
+		/// matcher.
+		///
+		template <ReversibleBoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool match_suffix (C matcher, S sequence) const
+		{
+			const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Complete matching with sequence
+		///
+		/// The view will be tested on matching exactly \a sequence. Matching values of the view and
+		/// elements of \a sequence will be performed by the equivalence operator.
+		///
+		template <BoundedSequence<T> S>
+		constexpr bool match (S sequence) const
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			return std::get<1>(splitting).empty() and empty(std::get<2>(splitting));
+		}
+
+		/// Complete matching with sequence and matcher
+		///
+		/// The view will be tested on matching exactly \a sequence. Matching values of the view and
+		/// elements of \a sequence will be performed by the equivalence operator.
+		///
+		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool match (C matcher, S sequence) const
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			return std::get<1>(splitting).empty() and empty(std::get<2>(splitting));
+		}
+
+
+
+
+		/// Forward transformation
+		///
+		/// The values in the view will be transformed by \a transformer. The values will be traversed
+		/// from the first to the last value. An optional \a variable can be passed on from
+		/// transformation to transformation and will be returned eventually.
+		///
+		/// @{
+		///
+
+		template <Callable<T, T> C>
+		constexpr void transform (C transformer)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			for (size_t index = 0; index < length; ++index)
+			{
+				values[index] = transformer(std::move(values[index]));
 			}
+		}
 
-			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool match_suffix (C matcher, S sequence) const
+		template <Callable<T, T, size_t> C>
+		constexpr void transform (C transformer)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			for (size_t index = 0; index < length; ++index)
 			{
-				const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
-				return std::get<2>(splitting).empty();
+				values[index] = transformer(std::move(values[index]), index);
 			}
-			/// @}
+		}
 
-
-			/// Complete matching
-			///
-			/// The view will be tested on having equal corresponding values with elements in \a
-			/// sequence. The matching is performed within the view in forward direction and within the
-			/// \a sequence as well in forward direction.
-			///
-			/// @{
-			///
-			template <BoundedSequence<T> S>
-			constexpr bool match (S sequence) const
+		template <typename V, Callable<std::tuple<T, V>, T, V> C>
+		constexpr V transform (C transformer, V variable)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			for (size_t index = 0; index < length; ++index)
 			{
-				const auto splitting = split_prefix(std::move(sequence));
-				return std::get<1>(splitting).empty() and std::get<2>(splitting).empty();
+				std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
 			}
+			return variable;
+		}
 
-			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool match (C matcher, S sequence) const
+		template <typename V, Callable<std::tuple<T, V>, T, V, size_t> C>
+		constexpr V transform (C transformer, V variable)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			for (size_t index = 0; index < length; ++index)
 			{
-				const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
-				return std::get<1>(splitting).empty() and std::get<2>(splitting).empty();
+				std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
 			}
-			/// @}
+			return variable;
+		}
+
+		/// @}
 
 
 
 
+		/// Backward transformation
+		///
+		/// The values in the view will be transformed by \a transformer. The values will be traversed
+		/// from the last to the first value. An optional \a variable can be passed on from
+		/// transformation to transformation and will be returned eventually.
+		///
+		/// @{
+		///
 
-
-			/// Prefix splitting with amount of values
-			///
-			/// The view will be splitted into two partitions. The first partition will hold the first \a
-			/// count values of the view and the second partition will hold all succeeding values of the
-			/// view. If the view has less than \a count values, the first partition will correspond to
-			/// the view and the second partition will be empty.
-			///
-			constexpr std::tuple<array_view, array_view> split_prefix (size_t count) const
+		template <Callable<T, T> C>
+		constexpr void transform_reverse (C transformer)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			auto index = length;
+			while (index-- > 0)
 			{
-				const auto maxCount = count < length ? count : length;
-				const auto pre = array_view(values, maxCount);
-				const auto post = array_view(values + maxCount, length - maxCount);
-				return std::make_tuple(pre, post);
+				values[index] = transformer(std::move(values[index]));
 			}
+		}
 
-
-			/// Prefix splitting with a predictor
-			///
-			/// The view will be splitted into two partitions. The first partition will be the longest
-			/// prefix for whose values \a predictor returns true. The second partition will hold all
-			/// succeeding values of the view.
-			///
-			template <Callable<bool, T> C>
-			constexpr std::tuple<array_view, array_view> split_prefix (C predictor) const
+		template <Callable<T, T, size_t> C>
+		constexpr void transform_reverse (C transformer)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			auto index = length;
+			while (index-- > 0)
 			{
-				auto index = std::size_t(0);
-				while (index < length and predictor(values[index]))
+				values[index] = transformer(std::move(values[index]), index);
+			}
+		}
+
+		template <typename V, Callable<std::tuple<T, V>, T, V> C>
+		constexpr V transform (C transformer, V variable)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			auto index = length;
+			while (index-- > 0)
+			{
+				std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
+			}
+			return variable;
+		}
+
+		template <typename V, Callable<std::tuple<T, V>, T, V, size_t> C>
+		constexpr V transform_reverse (C transformer, V variable)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			auto index = length;
+			while (index-- > 0)
+			{
+				std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
+			}
+			return variable;
+		}
+
+		/// @}
+
+
+
+
+		/// Forward filling with a bounded sequence
+		///
+		/// Values in the view will be assigned one by one to the corresponding elements in \a sequence
+		/// starting with the first value. Two views will be returned along with a sequence. The first
+		/// view will span all initial values which are reassigned. The second view will span all
+		/// succeeding values which are not reassigned. The returning sequence will hold all succeeding
+		/// elements of \a sequence.
+		///
+		template <BoundedeSequence<T> S>
+		constexpr std::tuple<array_view, array_view, S> fill (S sequence)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is const!");
+			auto folding = fold([&values, &length](auto index, auto element)
+			{
+				const auto isInBound = index < length;
+				const auto nextIndex = index + isInBound ? 1 : 0;
+				if (isInBound)
 				{
-					++index;
+					values[index] = std::move(element);
 				}
-				return std::make_tuple(array_view(values, index), array_view(values + index, length - index));
-			}
+				return std::make_tuple(nexIndex, isInBound);
+			}, size_t(0), std::move(sequence));
+			return std::tuple_cat(split_prefix(std::get<0>(folding)), std::tie(std::move(std::get<1>(folding))));
+		}
 
-			/// Prefix splitting with a sequence
-			///
-			/// The view will be splitted into two partitions. The first partition will be the longest
-			/// sharing prefix with \a sequence. The second partition will hold all succeeding values of
-			/// the view.
-			///
-			template <Sequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
+		/// Backward filling with a bounded sequence
+		///
+		/// Values in the view will be assigned one by one to the corresponding  elements in \a sequence
+		/// starting with last value. Two views will be returned along with a sequence. The first view
+		/// will span all initial values which are not reassigned. The second view will span all tailing
+		/// values which are reassigned. The returning sequence will hold all succeeding elements of \a
+		/// sequence.
+		///
+		template <BoundedeSequence<T> S>
+		constexpr std::tuple<array_view, array_view, S> fill_reverse (S sequence)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is const!");
+			auto folding = fold([&values](auto index, auto element)
 			{
-				auto folding = fold([&](auto index, auto element)
+				const auto isInBound = index > 0;
+				const auto nextIndex = index - isInBound ? 1 : 0;
+				if (isInBound)
 				{
-					const auto isEquivalent = index < length and values[index] == element;
-					const auto nextIndex = index + isEquivalent ? 1 : 0;
-					return std::make_tuple(nextIndex, isEquivalent);
-				}, std::size_t(0), std::move(sequence));
-				const auto pre = array_view(values, std::get<0>(folding));
-				const auto post = array_view(values, std::get<1>(folding));
-				return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
-			}
-
-			/// Prefix splitting with a sequence and a matcher
-			///
-			/// The view will be splitted into two partitions. The first partition will be the longest
-			/// sharing prefix with \a sequence. The second partition will hold all succeeding values of
-			/// the view. The values in the view and the elements in the \a sequence will be matched by
-			/// \a matcher.
-			///
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (C matcher, S sequence) const
-			{
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto isEquivalent = index < length and matcher(values[index], element);
-					const auto nextIndex = index + isEquivalent ? 1 : 0;
-					return std::make_tuple(nextIndex, isEquivalent);
-				}, std::size_t(0), std::move(sequence));
-				const auto pre = array_view(values, std::get<0>(folding));
-				const auto post = array_view(values, std::get<1>(folding));
-				return std::make_tuple(pre, post, std::move(std::get<1>(folding)));
-			}
-
-
-
-
-
-			/// Suffix splitting with amount of values
-			///
-			/// The view will be splitted into two partitions. The second partition will hold the last \a
-			/// count values of the view and the first partition will hold all preceeding values of the
-			/// view. If the view has less than \a count values, the first partition will be empty and
-			/// the second partition will correspond to the view.
-			///
-			constexpr std::tuple<array_view, array_view> split_suffix (size_t count) const;
-
-			/// Suffix splitting with a predictor
-			///
-			/// The view will be splitted into two partitions. The second partition will be the longest
-			/// suffix for whose values \a predictor returns true. The first partition will hold all
-			/// preceeding values of the view.
-			///
-			template <Callable<bool, T> C>
-			constexpr std::tuple<array_view, array_view> split_suffix (C predictor) const;
-
-			/// Suffix splitting with a sequence
-			///
-			/// The view will be splitted into two partitions. The secondt partition will be the longest
-			/// sharing suffix with \a sequence. The first partition will hold all preceeding values of
-			/// the view.
-			///
-			template <ReversibleBoundedSequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> split_suffix (S sequence) const;
-
-			/// Suffix splitting with a sequence and a matcher
-			///
-			/// The view will be splitted into two partitions. The second partition will be the longest
-			/// sharing suffix with \a sequence. The first partition will hold all preceeding values of
-			/// the view. The values in the view and the elements in the \a sequence will be matched by
-			/// \a matcher.
-			///
-			template <ReversibleBoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (C matcher, S sequence) const;
-
-
-
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Transformation
-
-			/// Transforming
-			///
-			/// The values in the view will be transformed by \a transformer. The traversion is forward,
-			/// starting with the first value and ending with the last one. An optional \a variable can
-			/// be passed on from transformation to transformation. When a \a variable is passed on, the
-			/// last value of this variable will be returned.
-			///
-			/// @{
-
-			template <Callable<T, T> C>
-			constexpr void transform (C transformer)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[index] = transformer(std::move(values[index]));
-			}
-
-			template <Callable<T, T, std::size_t> C>
-			constexpr void transform (C transformer)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[index] = transformer(std::move(values[index]), index);
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, T, V> C>
-			constexpr V transform (C transformer, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable));
-				return variable;
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
-			constexpr V transform (C transformer, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = transformer(std::move(values[index]), std::move(variable), index);
-				return variable;
-			}
-
-			/// @}
-
-
-			/// Transforming in reverse
-			///
-			/// The values in the view will be transformed by \a transformer. The traversion is backward
-			/// starting with the last value and ending with the first one. An optional \a variable can
-			/// be passed on from transformation to transformation. When a \a variable is passed on, the
-			/// last value of this variable will be returned.
-			///
-			/// @{
-
-			template <Callable<T, T> C>
-			constexpr void transform_reverse (C transformer)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (auto index = length; index > 0; --index)
-					values[index-1] = transformer(std::move(values[index-1]));
-			}
-
-			template <Callable<T, T, std::size_t> C>
-			constexpr void transform_reverse (C transformer)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (auto index = length; index > 0; --index)
-					values[index-1] = transformer(std::move(values[index-1]), index-1);
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, T, V> C>
-			constexpr V transform_reverse (C transformer, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (auto index = length; index > 0; --index)
-					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable));
-				return variable;
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, T, V, std::size_t> C>
-			constexpr V transform_reverse (C transformer, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (auto index = length; index > 0; --index)
-					std::tie(values[index-1], variable) = transformer(std::move(values[index-1]), std::move(variable), index-1);
-				return variable;
-			}
-
-			/// @}
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Filling
-
-			/// Filling with function
-			///
-			/// All values in the view are assigned a new value by \a filler. The values will be
-			/// traversed front to back. A \a variable can be set to be passed along the assignment. When
-			/// a variable is set, its final value will be returned.
-			///
-			/// @{
-
-			template <Callable<T> C>
-			constexpr void fill (C filler)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[index] = filler();
-			}
-
-			template <Callable<T, std::size_t> C>
-			constexpr void fill (C filler)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[index] = filler(index);
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, V> C>
-			constexpr V fill (C filler, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = filler(std::move(variable));
-				return variable;
-			}
-
-			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
-			constexpr V fill (C filler, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[index], variable) = filler(std::move(variable), index);
-				return variable;
-			}
-
-			/// @}
-
-
-			/// Filling with a constant
-			///
-			/// All values in the view will be assigned to \a constant. The values will be traversed
-			/// front to back.
-			template <typename U>
-				requires std::is_convertible<U, T>::value
-			constexpr void fill (U constant)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[index] = constant;
-			}
-
-
-			/// Filling with a bounded sequence
-			///
-			/// Starting with the first, as many values as possible will be assigned to the corresponding
-			/// element in \a sequence. The values will be traversed from front to back. The returning
-			/// tuple will contain a view on all values which have been assigned a new value, a view on
-			/// the remaining values which have been not assigned a new value, and the remaining elements
-			/// in \a sequence.
-			template <BoundedSequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> fill (S sequence)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				auto state = fold([values, length](auto index, auto element)
-				{
-					const auto keepOn = index < length;
-					const auto nextIndex = index + (keepOn ? 1 : 0);
-					if (keepOn) values[index] = std::move(element);
-					return std::make_tuple(nextIndex, keepOn);
-				}, std::size_t(0), std::move(sequence));
-				const auto index = std::get<0>(state);
-				sequence = std::move(std::get<1>(state));
-				const auto sharing = array_view(values, index);
-				const auto unsharing = array_view(values + index, length - index);
-				return std::make_tuple(sharing, unsharing, std::move(sequence));
-			}
-
-			/// Filling with an unbounded sequence
-			///
-			/// The values in the view will be assigned to the corresponding elements in \a sequence. The
-			/// values will be traversed from front to back. The returning sequence will contain all
-			/// remaining elements of \a sequence.
-			template <UnboundedSequence<T> S>
-			constexpr S fill (S sequence)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto keepOn = index < length;
-					const auto nextIndex = index + (keepOn ? 1 : 0);
-					if (keepOn) values[index] = std::move(element);
-					return std::make_tuple(nextIndex, keepOn);
-				}, std::size_t(0), std::move(sequence));
-				return std::get<1>(folding);
-			}
-
-
-			/// Filling in reverse with function
-			///
-			/// All values in the view are assigned a new value by \a filler. The values will be
-			/// traversed from back to front. A \a variable can be set to be passed along the assignment.
-			/// When a variable is set, its final value will be returned.
-			///
-			/// @{
-
-			template <Callable<T> C>
-			constexpr void fill_reverse (C filler)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[length - 1 - index] = filler();
-			}
-
-			template <Callable<T, std::size_t> C>
-			constexpr void fill_reverse (C filler)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[length - 1 - index] = filler(index);
-			}
-
-			template <typename V, Callable<std::tuple<T, V>, V> C>
-			constexpr V fill_reverse (C filler, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[length - 1 - index], variable) = filler(std::move(variable));
-				return variable;
-			}
-
-			template <typename V, Callable<std::tuple<T, V, std::size_t>, V> C>
-			constexpr V fill_reverse (C filler, V variable)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					std::tie(values[length - 1 - index], variable) = filler(std::move(variable), index);
-				return variable;
-			}
-
-			/// @}
-
-
-			/// Filling in reverse with a constant
-			///
-			/// All values in the view will be assigned to \a constant. The values will be traversed
-			/// back to front.
-			template <typename U>
-				requires std::is_convertible<U, T>::value
-			constexpr void fill_reverse (U constant)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				for (std::size_t index = 0; index < length; ++index)
-					values[length - 1 - index] = constant;
-			}
-
-			/// Filling in reverse with a bounded sequence
-			///
-			/// Starting with the last, as many values as possible will be assigned to the corresponding
-			/// element in \a sequence. The values will be traversed from back to front. The returning
-			/// tuple will contain a view on all values which have been assigned a new value, a view on
-			/// the remaining values which have been not assigned a new value, and the remaining elements
-			/// in \a sequence.
-			template <BoundedSequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> fill_reverse (S sequence)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto keepOn = index > 0;
-					const auto nextIndex = index - (keepOn ? 1 : 0);
-					if (keepOn) values[index-1] = std::move(element);
-					return std::make_tuple(nextIndex, keepOn);
-				}, length, std::move(elements));
-				const auto count = std::get<0>(folding);
-				sequence = std::move(std::get<1>(folding));
-				const auto sharing = array_view(values + count, length - count);
-				const auto unsharing = array_view(values, count);
-				return std::make_tuple(sharing, unsharing, std::move(sequence));
-			}
-
-			/// Filling in reverse with an unbounded sequence
-			///
-			/// The values in the view will be assigned to the corresponding elements in \a sequence. The
-			/// values will be traversed from back to front. The returning sequence will contain all
-			/// remaining elements of \a sequence.
-			template <UnboundedSequence<T> S>
-			constexpr S fill_reverse (S sequence)
-			{
-				static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto keepOn = index > 0;
-					const auto nextIndex = index - (keepOn ? 1 : 0);
-					if (keepOn) values[index-1] = std::move(element);
-					return std::make_tuple(nextIndex, keepOn);
-				}, length, std::move(sequence));
-				return std::get<1>(folding);
-			}
-
-
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Splitting
-
-			/// Prefix splitting with length
-			///
-			/// The view will be splitted into two partitions. The first partition will hold the first \a
-			/// \a count values of the view. The second partition will hold all the succeeding values in
-			/// the view. If \a count is less then the length of the view, the first partition will hold
-			/// all values whilst the second partition will be empty.
-			///
-			/// @note Time complexity is linear to the length of the view.
-			///
-			constexpr std::tuple<array_view, array_view> split_prefix (std::size_t count) const
-			{
-				const auto n = count <= length ? count : length;
-				const auto first = array_view(values, n);
-				const auto second = array_view(values + n, length - n);
-				return std::make_tuple(first, second);
-			}
-
-			/// Prefix splitting with prediction
-			///
-			/// The view is splitted into two partitions. The first partition will be the longest prefix
-			/// of values for which \a predictor returns true. The second partition will contain all the
-			/// remaining values in the view. An optional \a variable can be passed along the prediction
-			/// calls. The returning tuple will contain a view on the splitted prefix, the remaining
-			/// elements and the optional resulting variable.
-			///
-			/// @{
-
-			template <typename V, Callable<std::tuple<V, bool>, V, T> C>
-			constexpr std::tuple<array_view, array_view, V> split_prefix (C predictor, V variable) const
-			{
-				auto keepOn = true;
-				std::size_t index = 0;
-				while (index < length and keepOn)
-				{
-					std::tie(variable, keepOn) = predictor(std::move(variable), values[index]);
-					if (keepOn) ++index;
+					values[index-1] = std::move(element);
 				}
-				const auto pre = array_view(values, index);
-				const auto post = array_view(values + index, length - index);
-				return std::make_tuple(pre, post, std::move(variable));
-			}
+				return std::make_tuple(nexIndex, isInBound);
+			}, length, std::move(sequence));
+			return std::tuple_cat(split_prefix(std::get<0>(folding)), std::tie(std::move(std::get<1>(folding))));
+		}
 
-			template <typename V, Callable<bool, T> C>
-			constexpr std::tuple<array_view, array_view> split_prefix (C predictor) const
+		/// Forward filling with an unbounded sequence
+		///
+		/// All values in the view will be reassigned to the corresponding elements in \a sequence. A
+		/// sequence with the succeeding elements will be returned. The assignment will be performed
+		/// front to back.
+		///
+		template <UnboundedSequence<T> S>
+		constexpr S fill (S sequence)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is const!");
+			auto folding = fold([&values, &length](auto index, auto element)
 			{
-				auto index = 0;
-				while (index < length and predictor(values[index]))
-					++index;
-				const auto pre = array_view(values, index);
-				const auto post = array_view(values + index, length - index);
-				return std::make_tuple(pre, post);
-			}
-
-			/// @}
-
-
-			/// Prefix splitting with sequence sharing
-			///
-			/// The view will be splitted into two partitions. The first partition will view onto the
-			/// longest sharing prefix with \a sequence. The second partition will contain all remaining
-			/// values in the view. Matching is performed either with the equivalence operator or with
-			/// \a matcher. The returning tuple will contain views on both partitions and the remaining
-			/// elements of \a sequence.
-			///
-			/// @{
-
-			template <Sequence<T> S>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (S sequence) const
-			{
-				auto folding = fold([&](auto index, auto element)
+				const auto isInBound = index < length;
+				const auto nextIndex = index + isInBound ? 1 : 0;
+				if (isInBound)
 				{
-					const auto keepOn = index < length and values[index] == element;
-					const auto nextIndex = index + (keepOn ? 1 : 0);
-					return std::make_tuple(nextIndex, keepOn);
-				}, std::size_t(0), std::move(sequence));
-				const auto count = std::get<0>(folding);
-				sequence = std::move(std::get<1>(folding);
-				const auto prefix = array_view(values, count);
-				const auto stem = array_view(values + count, length - count);
-				return std::make_tuple(prefix, stem, std::move(sequence));
-			}
-
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> split_prefix (C matcher, S sequence) const
-			{
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto keepOn = index < length and matcher(values[index], element);
-					const auto nextIndex = index + (keepOn ? 1 : 0);
-					return std::make_tuple(nextIndex, keepOn);
-				}, std::size_t(0), std::move(sequence));
-				const auto count = std::get<0>(folding);
-				sequence = std::move(std::get<1>(folding));
-				const auto prefix = array_view(values, count);
-				const auto stem = array_view(values + count, length - count);
-				return std::make_tuple(prefix, stem, std::move(sequence));
-			}
-
-			/// @}
-
-
-			/// Suffix splitting with prediction
-			///
-			/// The view is splitted into two partitions. The first partition will be the longest suffix
-			/// of values for which \a predictor returns true. The second partition will contain all the
-			/// remaining values in the view. An optional \a variable can be passed along the prediction
-			/// calls. The returning tuple will contain a view on the splitted suffix, the remaining
-			/// elements and the optional resulting variable.
-			///
-			/// @{
-
-			template <Callable<bool, const T&> C>
-			constexpr std::tuple<array_view, array_view> split_suffix (C predictor) const
-			{
-				auto index = length;
-				while (index > 0 and predictor(values[index - 1]))
-					--index;
-				const auto suffix = array_view(values + index, length - index);
-				const auto stem = array_view(values, index);
-				return std::make_tuple(suffix, stem);
-			}
-
-			template <typename V, Callable<std::tuple<V, bool>, V, const T&> C>
-			constexpr std::tuple<array_view, array_view, V> split_suffix (C predictor, V variable) const
-			{
-				auto index = length;
-				auto keepOn = true;
-				while (index > 0 and keepOn)
-				{
-					std::tie(variable, keepOn) = predictor(std::move(variable), values[index - 1]);
-					if (keepOn) --index;
+					values[index] = std::move(element);
 				}
-				const auto suffix = array_view(values + index, length - index);
-				const auto stem = array_view(values, index);
-				return std::make_tuple(suffix, stem, std::move(variable));
-			}
+				return std::make_tuple(nexIndex, isInBound);
+			}, size_t(0), std::move(sequence));
+			return std::get<1>(folding);
+		}
 
-			/// @}
-
-
-			/// Suffix splitting with sequence
-			///
-			/// The view is splitted into two partitions. The first partition will be the longest suffix
-			/// which is shared with a prefix of \a sequence. The second partition will contain all
-			/// remaining values in the view. Matching is performed either with the equivalence operator
-			/// or \a matcher. The returning tuple will contain views on both partitions and the
-			/// remaining elements of \a sequence.
-			///
-			/// @{
-
-			template <Sequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr std::tuple<array_view, array_view, S> split_suffix (C matcher, S sequence) const
+		/// Backward filling with an unbounded sequence
+		///
+		/// All values in the view will be reassigned to the corresponding elements in \a sequence. A
+		/// sequence with the succeeding elements will be returned. The assignment will be performed
+		/// back to front.
+		///
+		template <UnboundedSequence<T> S>
+		constexpr S fill (S sequence)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is const!");
+			auto folding = fold([&values](auto index, auto element)
 			{
-				auto folding = fold([&](auto index, auto element)
+				const auto isInBound = index > 0;
+				const auto nextIndex = index - isInBound ? 1 : 0;
+				if (isInBound)
 				{
-					const auto keepOn = index > 0 and matcher(values[index - 1], element);
-					const auto nextIndex = index - (keepOn ? 1 : 0);
-					return std::make_tuple(nextIndex, keepOn);
-				}, length, std::move(sequence));
-				const auto count = std::get<0>(folding);
-				sequence = std::move(std::get<1>(folding));
-				const auto suffix = array_view(values + count, length - count);
-				const auto stem = array_view(values, count);
-				return std::make_tuple(suffix, stem, std::move(sequence));
-			}
+					values[index-1] = std::move(element);
+				}
+				return std::make_tuple(nexIndex, isInBound);
+			}, length, std::move(sequence));
+			return std::get<1>(folding);
+		}
 
-			template <Sequence S>
-			constexpr std::tuple<array_view, array_view, S> split_suffix (S sequence) const
+		/// Forward filling with look up
+		///
+		/// All values in the view will be reassigned by \a looker. The assignment will be performed
+		/// front to back.
+		///
+		template <Callable<T, size_t> C>
+		constexpr void fill (C looker)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			for (size_t index = 0; index < length; ++index)
 			{
-				auto folding = fold([&](auto index, auto element)
-				{
-					const auto keepOn = index > 0 and values[index - 1] == element;
-					const auto nextIndex = index - (keepOn ? 1 : 0);
-					return std::make_tuple(nextIndex, keepOn);
-				}, length, std::move(sequence));
-				const auto count = std::get<0>(folding);
-				sequence = std::move(std::get<1>(folding));
-				const auto suffix = array_view(values + count, length - count);
-				const auto stem = array_view(values, count);
-				return std::make_tuple(suffix, stem, std::move(sequence));
+				values[index] = looker(index);
 			}
+		}
 
-			/// @}
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Taker and dropper
-
-			/// Takes prefix from the view
-			///
-			///	Depending on the criterium, as many elements as possible are taken from the beginning of
-			/// the view. The view itself will be shrinked to this prefix. Either at most \a count
-			/// elements are taken, or the longest prefix for which \a predict returns true will be taken
-			/// or the longest shared prefix of the view and \a sequence is taken. For latter, the
-			/// tailing sequence will be returned and it can be customised with \a matcher. For
-			/// prediction and pattern sequence, the view will be traversed forward from its beginning.
-			///
-			/// @param count      Maximum amount of elements to take
-			/// @param predictor  Predicts if the element belongs to the prefix
-			/// @param elements   Pattern sequence whose prefix will be matched
-			/// @param matcher    Customable matcher function
-			///
-			/// @{
-			///
-
-			constexpr void take_prefix (std::size_t count)
+		/// Backward filling with look up
+		///
+		/// All values in the view will be reassigned by \a looker. The assignment will be performed
+		/// back to front.
+		///
+		template <Callable<T, size_t> C>
+		constexpr void fill_reverse (C looker)
+		{
+			static_assert(not std::is_const_v<T>, "Type of array_view is constant!");
+			auto index = length;
+			while (index-- > 0)
 			{
-				const auto splitting = split(count);
-				return std::get<0>(splitting);
+				values[index] = looker(index);
 			}
-
-			template <Callable<bool, T> C>
-			constexpr void take_prefix (C predictor)
-			{
-				const auto splitting = split_prefix(std::move(predictor));
-				return std::get<0>(splitting);
-			}
-
-			template <Sequence<T> S>
-			constexpr S take_prefix (S elements)
-			{
-				const auto splitting = split_prefix(std:move(elements));
-				*this = std::get<0>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr S take_prefix (C matcher, S elements)
-			{
-				const auto splitting = split_prefix(std::move(matcher), std::move(elements));
-				*this = std::get<0>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			/// @}
+		}
 
 
 
-			/// Takes suffix from the view
-			///
-			/// Depending on the criterium, as many elements as possible are taken from the ending of the
-			/// view. The view itself will be shrinked to this suffix. Either at most \a count elements
-			/// will be taken, or the longest suffix of elements for which \a predictor returns true will
-			/// be taken or the longest share between the suffix of the view and the prefix of \a
-			/// elements is taken. For latter, the tailing sequence will be returned and matching can be
-			/// customised with \a matcher.
-			///
-			/// @param count      Maximum amount of elements to consider as suffix
-			/// @param predictor  Predicts if an element belongs to the suffix
-			/// @param elements   Pattern sequence whose prefix will be matched with the suffix
-			/// @param matcher    Customisable matching function
-			///
-			/// @{
-			///
-
-			constexpr void take_suffix (std::size_t count)
-			{
-				const auto boundedCount = count <= length ? count : length;
-				const auto splitting = split(length - boundedCount);
-				*this = std::get<1>(splitting);
-			}
-
-			template <Callable<bool, T> C>
-			constexpr void take_suffix (C predictor)
-			{
-				const auto splitting = split_suffix(std::move(predictor));
-				*this = std::get<2>(splitting);
-			}
-
-			template <Sequence<T> S>
-			constexpr S take_suffix (S elements)
-			{
-				const auto splitting = split_suffix(std::move(elements));
-				*this = std::get<1>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr S take_suffix (C matcher, S elements)
-			{
-				const auto splitting = split_suffix(std::move(matcher), std::move(elements));
-				*this = std::get<1>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			/// @}
 
 
 
-			/// Drops the prefix from the view
-			///
-			/// Depending on the criterium, as many values as possible will be dropped from the beginning
-			/// of the view. This view will be shrinked to the remaining suffix. Either a prefix with at
-			/// most \a count values will be dropped, or the longest prefix of values for which \a
-			/// predictor returns true is dropped, or the longest share between the prefix of the view
-			/// and the prefix of the \a elements is dropped. For latter, the tailing sequence will be
-			/// returned and matching can be customised with \a matcher.
-			///
-			/// @param count      Maximum amount of elements to consider as prefix
-			/// @param predictor  Predicts if an element belongs to the prefix
-			/// @param elements   Pattern sequence whose prefix will be matched with the prefix
-			/// @param matcher    Customisable matching function
-			///
-			/// @{
-			///
+		/// Prefix taker with count
+		///
+		/// If the view has more than \a count values, it will be shrinked to the first \a count values.
+		/// If the view has equal or less than \a count values, it will not be modified.
+		///
+		constexpr void take_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			*this = std::get<0>(splitting);
+		}
 
-			constexpr void drop_prefix (std::size_t count)
-			{
-				const auto splitting = split(count);
-				*this = std::get<1>(splitting);
-			}
+		/// Prefix taker with prediction
+		///
+		/// The view will be shrinked to the longest prefix of values for which \a predictor returns
+		/// true.
+		///
+		template <Callable<bool, T> C>
+		constexpr void take_prefix (C predictor)
+		{
+			const auto splitting = split_prefix(std::move(predictor));
+			*this = std::get<0>(splitting);
+		}
 
-			template <Callable<bool, T> C>
-			constexpr void drop_prefix (C predictor)
-			{
-				const auto splitting = split_prefix(std::move(predictor));
-				*this std::get<1>(splitting);
-			}
+		/// Prefix taker with sequence
+		///
+		/// The view will be shrinked to the longest prefix which \a sequence shares with the view.
+		/// Values of the view and elements of \a sequence will be matched by the equivalence operator.
+		///
+		template <Sequence<T> S>
+		constexpr void take_prefix (S sequence)
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			*this = std::get<0>(splitting);
+		}
 
-			template <Sequence<T> S>
-			constexpr S drop_prefix (S elements)
-			{
-				const auto splitting = split_prefix(std:move(elements));
-				*this = std::get<1>(splitting);
-				return std::get<2>(splitting);
-			}
+		/// Prefix taker with sequence and matcher
+		///
+		/// The view will be shrinked to the longest prefix which \a sequence shares with the view.
+		/// Values of the view and elements of \a sequence will be matched by \a matcher.
+		///
+		template <Sequence<T> S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr void take_prefix (C matcher, S sequence)
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			*this = std::get<0>(splitting);
+		}
 
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr S drop_prefix (C matcher, S elements)
-			{
-				const auto splitting = split_prefix(std::move(matcher), std::move(elements));
-				*this = std::get<1>(splitting);
-				return std::get<2>(splitting);
-			}
 
-			/// @}
+
+
+
+		/// Suffix taker with count
+		///
+		/// If the view has more than \a count values, it will be shrinked to the last \a count values.
+		/// If the view has equal or less than \a count values, it will not be modified.
+		///
+		constexpr void take_suffix (size_t count)
+		{
+			const auto splitting = split_suffix(count);
+			*this = std::get<1>(splitting);
+		}
+
+		/// Suffix taker with prediction
+		///
+		/// The view will be shrinked to the longest suffix of values for which \a predictor returns
+		/// true.
+		///
+		template <Callable<bool, T> C>
+		constexpr void take_suffix (C predictor)
+		{
+			const auto splitting = split_suffix(std::move(predictor));
+			*this = std::get<1>(splitting);
+		}
+
+		/// Suffix taker with sequence
+		///
+		/// The view will be shrinked to the longest suffix which \a sequence shares with the view.
+		/// Values of the view and elements of \a sequence will be matched by the equivalence operator.
+		///
+		template <ReversibleBoundedSequence<T> S>
+		constexpr void take_suffix (S sequence)
+		{
+			const auto splitting = split_suffix(std::move(sequence));
+			*this = std::get<1>(splitting);
+		}
+
+		/// Suffix taker with sequence and matcher
+		///
+		/// The view will be shrinked to the longest suffix which \a sequence shares with the view.
+		/// Values of the view and elements of \a sequence will be matched by \a matcher.
+		///
+		template <ReversibleBoundedSequence<T> S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr void take_suffix (C matcher, S sequence)
+		{
+			const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
+			*this = std::get<1>(splitting);
+		}
+
+
+
+
+		/// Prefix dropper with count
+		///
+		/// If the view has more than \a count values, it will be shrinked such that the first \a count
+		/// values are dropped from the view. If the view has equal or less than \a count values, it will
+		/// not be modified.
+		///
+		constexpr void drop_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			*this = std::get<1>(splitting);
+		}
+
+		/// Prefix dropper with prediction
+		///
+		/// The view will be shrinked such that the longest prefix of values for which \a predictor
+		//// returns true is dropped.
+		///
+		template <Callable<bool, T> C>
+		constexpr void drop_prefix (C predictor)
+		{
+			const auto splitting = split_prefix(std::move(predictor));
+			*this = std::get<1>(splitting);
+		}
+
+		/// Prefix dropper with sequence
+		///
+		/// The view will be shrinked such that the longest prefix which \a sequence shares with the view
+		/// will be dropped. Values of the view and elements of \a sequence will be matched by the
+		/// equivalence operator.
+		///
+		template <Sequence<T> S>
+		constexpr void drop_prefix (S sequence)
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			*this = std::get<1>(splitting);
+		}
+
+		/// Prefix dropper with sequence and matcher
+		///
+		/// The view will be shrinked such that the longest prefix which \a sequence shares with the view
+		/// will be dropped. Values of the view and elements of \a sequence will be matched by \a
+		/// matcher.
+		///
+		template <Sequence<T> S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr void drop_prefix (C matcher, S sequence)
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			*this = std::get<1>(splitting);
+		}
+
+
+
+
+		/// Suffix dropper with count
+		///
+		/// If the view has more than \a count values, it will be shrinked such that the last \a count
+		/// values will be dropped. If the view has equal or less than \a count values, it will be
+		/// emptied.
+		///
+		constexpr void drop_suffix (size_t count)
+		{
+			const auto splitting = split_suffix(count);
+			*this = std::get<0>(splitting);
+		}
+
+		/// Suffix dropper with prediction
+		///
+		/// The view will be shrinked such that the longest suffix of values for which \a predictor
+		/// returns true will be dropped.
+		///
+		template <Callable<bool, T> C>
+		constexpr void drop_suffix (C predictor)
+		{
+			const auto splitting = split_suffix(std::move(predictor));
+			*this = std::get<0>(splitting);
+		}
+
+		/// Suffix dropper with sequence
+		///
+		/// The view will be shrinked such that the longest suffix which \a sequence shares with the view
+		/// will be dropped. Values of the view and elements of \a sequence will be matched by the
+		/// equivalence operator.
+		///
+		template <ReversibleBoundedSequence<T> S>
+		constexpr void drop_suffix (S sequence)
+		{
+			const auto splitting = split_suffix(std::move(sequence));
+			*this = std::get<0>(splitting);
+		}
+
+		/// Suffix dropper with sequence and matcher
+		///
+		/// The view will be shrinked such that the longest suffix which \a sequence shares with the view
+		/// will be dropped. Values of the view and elements of \a sequence will be matched by \a
+		/// matcher.
+		///
+		template <ReversibleBoundedSequence<T> S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr void drop_suffix (C matcher, S sequence)
+		{
+			const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
+			*this = std::get<0>(splitting);
+		}
+
+
 
 
 
@@ -1508,56 +1338,6 @@ namespace stdext
 
 			/// @}
 
-
-
-			/// Drops the suffix from the view
-			///
-			/// Depending on the criterium, as many values as possible will be dropped from the ending of
-			/// the view. This view will be shrinked to the remaining prefix. Either a suffix with at
-			/// most \a count values will be dropped, or the longest suffix of values for which \a
-			/// predictor returns true is dropped, or the longest share between the suffix of the view
-			/// and the prefix of the \a elements is dropped. For latter, the tailing sequence will be
-			/// returned and matching can be customised with \a matcher.
-			///
-			/// @param count      Maximum amount of elements to consider as suffix
-			/// @param predictor  Predicts if an element belongs to the suffix
-			/// @param elements   Pattern sequence whose prefix will be matched with the suffix
-			/// @param matcher    Customisable matching function
-			///
-			/// @{
-			///
-
-			constexpr void drop_suffix (std::size_t count)
-			{
-				const auto boundedCount = count <= length ? count : length;
-				const auto splitting = split(length - boundedCount);
-				*this = std::get<0>(splitting);
-			}
-
-			template <Callable<bool, T> C>
-			constexpr void drop_suffix (C predictor)
-			{
-				const auto splitting = split_suffix(std::move(predictor));
-				*this = std::get<0>(splitting);
-			}
-
-			template <Sequence<T> S>
-			constexpr S drop_suffix (S elements)
-			{
-				const auto splitting = split_suffix(std::move(elements));
-				*this = std::get<0>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			template <Sequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr S drop_suffix (C matcher, S elements)
-			{
-				const auto splitting = split_suffix(std::move(matcher), std::move(elements));
-				*this = std::get<0>(splitting);
-				return std::get<2>(splitting);
-			}
-
-			/// @}
 
 
 			/// Tries to drop a suffix from the view
