@@ -1295,561 +1295,612 @@ namespace stdext
 
 
 
-			/// Tries to drop a prefix from the view
-			///
-			/// If the criterium is fulfilled, the prefix will be dropped. If the criterium is not
-			/// fulfilled, the view will not be changed. The success of the criterium will be returned.
-			/// Either a prefix of exactly \a count values, or a prefix which completely matches \a
-			/// elements will be dropped. Matching can be customised with \a matcher.
-			///
-			/// @param count      Amount of values to be dropped
-			/// @param elemenets  Bounded pattern sequence which should match the dropped prefix
-			/// @param matcher    Customisable matching function
-			///
-			/// @{
-			///
-
-			constexpr bool drop_prefix_if (std::size_t count)
+		/// Prefix take attempt with count
+		///
+		/// If the view has equal or more than \a count values, it will be shrinked to the first \a count
+		/// values. If the view has less than \a count values, it will not be modified. A boolean value
+		/// will be returned indicating if the shrinkage has been performed.
+		///
+		constexpr bool try_take_prefix (size_t count)
+		{
+			if (count < length)
 			{
-				if (count <= length)
-					drop_prefix(count);
-				return count <= length;
+				length = count
+			}
+			return length == count;
+		}
+
+		/// Prefix take attempt with sequence
+		///
+		/// If the view has \a sequence as its prefix, it will be shrinked to this prefix. If the view
+		/// does not have this \a sequence as its prefix, it will not be modified. A boolean value will
+		/// be returned to indicate if the shrinkage has been performed. The individual values of the
+		/// view and the elements of \a sequence will be matched by the equivalence operator.
+		///
+		template <BoundedeSequence<T> S>
+		constexpr bool try_take_prefix (S sequence)
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<0>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Prefix take attempt with sequence and matcher
+		///
+		/// If the view has \a sequence as its prefix, it will be shrinked to this prefix. If the view
+		/// does not have this \a sequence as its prefix, it will not be modified. A boolean value will
+		/// be returned to indicate if the shrinkage has been performed. The individual values of the
+		/// view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <BoundedeSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool try_take_prefix (C matcher, S sequence)
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<0>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+
+
+
+
+		/// Suffix take attempt with count
+		///
+		/// If the view has equal or more than \a count values, it will be shrinked to the last \a count
+		/// values. If the view has less than \a count values, it will not be modified. A boolean value
+		/// will be returned indicating if the shrinkage has been performed.
+		///
+		constexpr bool try_take_suffix (size_t count)
+		{
+			if (count < length)
+			{
+				values += length - count;
+				length = count;
+			}
+			return length == count;
+		}
+
+		/// Suffix take attempt with sequence
+		///
+		/// If the view has \a sequence as its suffix, it will be shrinked to this suffix. If the view
+		/// does not have this \a sequence as its suffix, it will not be modified. A boolean value will
+		/// be returned to indicate if the shrinkage has been performed. The individual values of the
+		/// view and the elements of \a sequence will be matched by the equivalence operator.
+		///
+		template <ReversibleBoundedeSequence<T> S>
+		constexpr bool try_take_suffix (S sequence)
+		{
+			const auto splitting = split_suffix(std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<1>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Suffix take attempt with sequence and matcher
+		///
+		/// If the view has \a sequence as its suffix, it will be shrinked to this suffix. If the view
+		/// does not have this \a sequence as its suffix, it will not be modified. A boolean value will
+		/// be returned to indicate if the shrinkage has been performed. The individual values of the
+		/// view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <ReversibleBoundedeSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool try_take_suffix (C matcher, S sequence)
+		{
+			const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<1>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+
+
+
+
+		/// Prefix drop attempt with count
+		///
+		/// If the view has equal or more than \a count values, then the first \a count values will be
+		/// dropped. If the view has less than \a count values, it will not be modified. A boolean value
+		/// will be returned indicating if the shrinkage has been performed.
+		///
+		constexpr bool try_drop_prefix (size_t count)
+		{
+			if (count <= length)
+			{
+				values += count;
+				length -= count;
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		/// Prefix drop attempt with sequence
+		///
+		/// If the view has \a sequence as its prefix, then this particular prefix will be dropped. If
+		/// the view does not have this \a sequence as its prefix, it will not be modified. A boolean
+		/// value will be returned to indicate if the shrinkage has been performed. The individual values
+		/// of the view and the elements of \a sequence will be matched by the equivalence operator.
+		///
+		template <BoundedeSequence<T> S>
+		constexpr bool try_drop_prefix (S sequence)
+		{
+			const auto splitting = split_prefix(std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<1>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Prefix drop attempt with sequence and matcher
+		///
+		/// If the view has \a sequence as its prefix, then this particular prefix will be dropped from
+		/// the view. If the view does not have this \a sequence as its prefix, it will not be modified.
+		/// A boolean value will be returned to indicate if the shrinkage has been performed. The
+		/// individual values of the view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <BoundedeSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool try_drop_prefix (C matcher, S sequence)
+		{
+			const auto splitting = split_prefix(std::move(matcher), std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<1>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+
+
+		/// Suffix drop attempt with count
+		///
+		/// If the view has equal or more than \a count values, then the last \a count values will be
+		/// dropped from the view. If the view has less than \a count values, it will not be modified. A
+		/// boolean value will be returned indicating if the shrinkage has been performed.
+		///
+		constexpr bool try_drop_suffix (size_t count)
+		{
+			if (count <= length)
+			{
+				length -= count;
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		/// Suffix drop attempt with sequence
+		///
+		/// If the view has \a sequence as its suffix, then this particular suffix will be dropped from
+		/// the view. If the view does not have this \a sequence as its suffix, it will not be modified.
+		/// A boolean value will be returned to indicate if the shrinkage has been performed. The
+		/// individual values of the view and the elements of \a sequence will be matched by the
+		/// equivalence operator.
+		///
+		template <ReversibleBoundedeSequence<T> S>
+		constexpr bool try_drop_suffix (S sequence)
+		{
+			const auto splitting = split_suffix(std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<0>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+		/// Suffix take attempt with sequence and matcher
+		///
+		/// If the view has \a sequence as its suffix, it will be shrinked to this suffix. If the view
+		/// does not have this \a sequence as its suffix, it will not be modified. A boolean value will
+		/// be returned to indicate if the shrinkage has been performed. The individual values of the
+		/// view and the elements of \a sequence will be matched by \a matcher.
+		///
+		template <ReversibleBoundedeSequence S, Callable<bool, T, sequence_type_t<S>> C>
+		constexpr bool try_take_suffix (C matcher, S sequence)
+		{
+			const auto splitting = split_suffix(std::move(matcher), std::move(sequence));
+			if (empty(std::get<2>(splitting)))
+			{
+				*this = std::get<1>(splitting);
+			}
+			return empty(std::get<2>(splitting));
+		}
+
+
+
+		/// Rotates values \a count times to the right
+		///
+		/// The values in the view will be rotated by \a count shifts to the right. The rotation will
+		/// be performed in place.
+		///
+		/// @note Time complexity is linear with the length of the view.
+		/// @note Space complexity is constant.
+		///
+		constexpr void rotate (size_t count)
+		{
+			static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
+			static_assert(std::is_nothrow_copy_constructible<T>:value,
+				"Values of array_view must be nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Values of array_view must be nothrow copy assignable!");
+			rotate(0, length, count);
+		}
+
+		/// Revertion
+		///
+		/// The values in the view will be reversed. The revertion will be performed in place.
+		///
+		/// @note Time complexity is linear with the length of the view.
+		///
+		constexpr void reverse ()
+		{
+			static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
+				"Values of array_view must be nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Values of array_view must be nothrow copy assignable!");
+			reverse(0, length);
+		}
+
+
+
+
+		/// Stable partition
+		///
+		/// All values will be rearranged into two contiguous parts which span the whole view. The
+		/// first part will contain elements which are conform with the \a predictor. The second part
+		/// will contain elements which are not conform with the \a predictor. Within each part,
+		/// every two values will have the same order as before.
+		///
+		/// @param predictor  A callable object which takes a constant reference to some value and
+		///                   returns a boolean indicating whether the value is conform with the
+		///                   predicate or not.
+		///
+		/// @note Time complexity is linear with the length of the view.
+		///
+		template <Callable<bool, const T&> C>
+		constexpr std::tuple<array_view, array_view> partition_stabely (C predictor)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+			static_assert(not std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be at least nothrow copy assignable!");
+			static_assert(not std::is_nothrow_copy_constructible<T>::value,
+			"Value of array_view must be at least nothrow copy constructible!");
+
+			// skip any positive prefix
+			size_t begin = 0
+			while (begin < length and predictor(values[begin]))
+				++begin;
+
+			// scan the next negative part
+			auto negative = begin == length ? length : (begin + 1);
+			while (negative < length and not predictor(values[negative]))
+				--negative;
+
+			while (negative < length)
+			{
+				// negative is less length and predictor(value[negative]) returns true, so we don't have
+				// to ask it again
+				auto positive = negative + 1;
+				while (positive < length and predictor(values[positive]))
+					++positive;
+
+				/// rotate the window, so partitions are in right order
+				array_view(values + begin, positive + negative - begin).rotate(positive);
+
+				// skip the now positive part
+				begin = begin + (positive - negative);
+
+				// end of negative part is where end of positive part has been
+				negative = positive;
 			}
 
-			template <BoundedSequence<T> S>
-			constexpr bool drop_prefix_if (S elements)
-			{
-				const auto splitting = split_prefix(std::move(elements));
-				const auto isMatchingAll = not std::get<2>(splitting);
-				if (isMatchingAll)
-					*this = sd::get<1>(splitting);
-				return isMatchingAll;
-			}
-
-			template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> C>
-			constexpr bool drop_prefix_if (C matcher, S elements)
-			{
-				const auto splitting = split_prefix(std::move(matcher), std::move(elements));
-				const auto isMatchingAll = not std::get<2>(splitting);
-				if (isMatchingAll)
-					*this = std::get<1>(splitting);
-				return isMatchingAll;
-			}
-
-			/// @}
+			auto pre = array_view(values, begin);
+			auto post = array_view(values + begin, length - begin);
+			return std::make_tuple(pre, post);
+		}
 
 
-
-			/// Tries to drop a suffix from the view
-			///
-			/// If the criterium is fulfilled, the suffix will be dropped. If the criterium is not
-			/// fulfilled, the view will not be changed. The success of the criterium will be returned.
-			/// Either a suffix of exactly \a count values, or a suffix which completely matches \a
-			/// elements will be dropped. Matching can be customised with \a matcher.
-			///
-			/// @param count      Amount of values to be dropped
-			/// @param elemenets  Bounded pattern sequence which should match the dropped suffix
-			/// @param matcher    Customisable matching function
-			///
-			/// @{
-			///
-
-			constexpr bool drop_suffix_if (std::size_t count)
-			{
-				if (count <= length)
-				{
-					const auto splitting = split_suffix(length - boundedCount);
-					*this = std::get<0>(splitting);
-				}
-				return count <= length;
-			}
-
-			template <BoundedSequence<T> S>
-			constexpr bool drop_suffix_if (S elements)
-			{
-				const auto splitting = split_suffix(std::move(elements));
-				const auto isMatchingAll = not std::get<2>(splitting);
-				if (isMatchingAll)
-					*this = std::get<0>(splitting);
-				return isMatchingAll;
-			}
-
-			template <BoundedSequence S, Callable<bool, const T&, sequence_type_t<S>> C>
-			constexpr bool drop_suffix_if (C matcher, S elements)
-			{
-				const auto splitting = split_suffix(std::move(matcher), std::move(elements));
-				const auto isMatchingAll = not std::get<2>(splitting);
-				if (isMatchingAll)
-					*this = std::get<0>(splitting);
-				return isMatchingAll;
-			}
-
-			/// @}
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Rotation and Reversion
-
-			/// Rotates values \a count times to the right
-			///
-			/// The values in the view will be rotated by \a count shifts to the right. The rotation will
-			/// be performed in place.
-			///
-			/// @note Time complexity is linear with the length of the view.
-			/// @note Space complexity is constant.
-			///
-			constexpr void rotate (std::size_t count)
-			{
-				static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
-				static_assert(std::is_nothrow_copy_constructible<T>:value,
-					"Values of array_view must be nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Values of array_view must be nothrow copy assignable!");
-
-				rotate(0, length, count);
-			}
-
-			/// Revertion
-			///
-			/// The values in the view will be reversed. The revertion will be performed in place.
-			///
-			/// @note Time complexity is linear with the length of the view.
-			///
-			constexpr void reverse ()
-			{
-				static_assert(not std::is_const<T>::value, "Values of array_view must not be constant!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Values of array_view must be nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Values of array_view must be nothrow copy assignable!");
-
-				reverse(0, length);
-			}
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Partition
-
-			/// Stable partition
-			///
-			/// All values will be rearranged into two contiguous parts which span the whole view. The
-			/// first part will contain elements which are conform with the \a predictor. The second part
-			/// will contain elements which are not conform with the \a predictor. Within each part,
-			/// every two values will have the same order as before.
-			///
-			/// @param predictor  A callable object which takes a constant reference to some value and
-			///                   returns a boolean indicating whether the value is conform with the
-			///                   predicate or not.
-			///
-			/// @note Time complexity is linear with the length of the view.
-			///
-			template <Callable<bool, const T&> C>
-			constexpr std::tuple<array_view, array_view> partition_stabely (C predictor)
-			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
-				static_assert(not std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be at least nothrow copy assignable!");
-				static_assert(not std::is_nothrow_copy_constructible<T>::value,
+		/// Unstable partition
+		///
+		/// All values will be rearranged into two contiguous parts which span the whole view. The
+		/// first part will contain elements which are conform with the \a predictor. The second part
+		/// will contain elements which are not conform with the \a predictor. It is not guarantied
+		/// that two values in the same part will keep their original order.
+		///
+		/// @param predictor  A callable object which takes a constant reference to some value and
+		///                   returns a boolean indicating whether the value is conform with the
+		///                   predicate or not.
+		///
+		/// @note Time complexity is linear in the length of the view.
+		///
+		template <Callable<bool, const T&> C>
+		constexpr std::tuple<array_view, array_view> partition (C predictor)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
 				"Value of array_view must be at least nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be at least nothrow copy assignable!");
 
-				// skip any positive prefix
-				std::size_t begin = 0
-				while (begin < length and predictor(values[begin]))
-					++begin;
-
-				// scan the next negative part
-				auto negative = begin == length ? length : (begin + 1);
-				while (negative < length and not predictor(values[negative]))
-					--negative;
-
-				while (negative < length)
-				{
-					// negative is less length and predictor(value[negative]) returns true, so we don't have
-					// to ask it again
-					auto positive = negative + 1;
-					while (positive < length and predictor(values[positive]))
-						++positive;
-
-					/// rotate the window, so partitions are in right order
-					array_view(values + begin, positive + negative - begin).rotate(positive);
-
-					// skip the now positive part
-					begin = begin + (positive - negative);
-
-					// end of negative part is where end of positive part has been
-					negative = positive;
-				}
-
-				auto pre = array_view(values, begin);
-				auto post = array_view(values + begin, length - begin);
-				return std::make_tuple(pre, post);
-			}
-
-
-			/// Unstable partition
-			///
-			/// All values will be rearranged into two contiguous parts which span the whole view. The
-			/// first part will contain elements which are conform with the \a predictor. The second part
-			/// will contain elements which are not conform with the \a predictor. It is not guarantied
-			/// that two values in the same part will keep their original order.
-			///
-			/// @param predictor  A callable object which takes a constant reference to some value and
-			///                   returns a boolean indicating whether the value is conform with the
-			///                   predicate or not.
-			///
-			/// @note Time complexity is linear in the length of the view.
-			///
-			template <Callable<bool, const T&> C>
-			constexpr std::tuple<array_view, array_view> partition (C predictor)
+			if (length > 0)
 			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Value of array_view must be at least nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be at least nothrow copy assignable!");
-
-				if (length > 0)
-				{
-					const auto bound = partition(std::move(predictor), 0, length);
-					return std::make_tuple(array_view(values, bound), array_view(values + bound, length - bound));
-				}
-				else
-				{
-					return std::make_tuple(array_view(), array_view());
-				}
+				const auto bound = partition(std::move(predictor), 0, length);
+				return std::make_tuple(array_view(values, bound), array_view(values + bound, length - bound));
 			}
-
-			/// Partition with random pivot
-			///
-			/// The values will be rearranged into two parts. Each element in the first part will be in
-			/// right order compared with each element in the second part. The order is defined by \a
-			/// comparer, which defines a strict weak order on the values. Both views will be
-			/// individually smaller than the original view. The views will be a concatenation of the
-			/// original view. If the original is empty, so will be both resulting views. Values will not
-			/// hold their original order.
-			///
-			/// @param comparer  A callable object which takes two constant references to some value of
-			///                  type \a T and returns a boolean indicating whether the two values are in
-			///                  the right order.
-			///
-			/// @note Time complexity is linear in the length of the view.
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
+			else
 			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must not be const!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Value of array_view must be at least nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be at least nothrow copy assignable!");
-
-				if (length > 3)
-				{
-					const auto bound = random_partition(std::move(comparer), 0, length);
-					auto positives = array_view(values, bound);
-					auto negatives = array_view(values + bound, length - bound);
-					return std::make_tuple(positives, negatives);
-				}
-				else if (length == 3)
-				{
-					// TODO implementation
-				}
+				return std::make_tuple(array_view(), array_view());
 			}
+		}
 
-			///	Sorted partition
-			///
-			/// The values will be rearranged into two parts. The first part will contain all values
-			/// which belong to the top \a count values when sorted with \a comparer. The second part
-			/// will contain all remaining values. These are the bottom \a length - \a count values when
-			/// sorted with \a comparer. The returning views will be contiguous and will span the
-			/// original view. Values within one part are not guaranteed to have any order in place.
-			///
-			/// @param comparer  A callable object which takes two constant references for some value of
-			///                  type \a T and returns a boolean which indicates if the two values are in
-			///                  right order
-			/// @param count     Amount of values in the first part of the partition
-			///
-			/// @note Time complexity is \a count + (\a length - \a count) log(\a count).
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t count)
+		/// Partition with random pivot
+		///
+		/// The values will be rearranged into two parts. Each element in the first part will be in
+		/// right order compared with each element in the second part. The order is defined by \a
+		/// comparer, which defines a strict weak order on the values. Both views will be
+		/// individually smaller than the original view. The views will be a concatenation of the
+		/// original view. If the original is empty, so will be both resulting views. Values will not
+		/// hold their original order.
+		///
+		/// @param comparer  A callable object which takes two constant references to some value of
+		///                  type \a T and returns a boolean indicating whether the two values are in
+		///                  the right order.
+		///
+		/// @note Time complexity is linear in the length of the view.
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr std::tuple<array_view, array_view> partition_randomly (C comparer)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must not be const!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
+				"Value of array_view must be at least nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be at least nothrow copy assignable!");
+
+			if (length > 3)
 			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Value of array_view must be nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be nothrow_copy assignable!");
+				const auto bound = random_partition(std::move(comparer), 0, length);
+				auto positives = array_view(values, bound);
+				auto negatives = array_view(values + bound, length - bound);
+				return std::make_tuple(positives, negatives);
+			}
+			else if (length == 3)
+			{
+				// TODO implementation
+				static_assert(false, "missing implementation");
+			}
+		}
 
-				// adjust count if necessary
-				if (count > length)
-					count = length;
+		///	Sorted partition
+		///
+		/// The values will be rearranged into two parts. The first part will contain all values
+		/// which belong to the top \a count values when sorted with \a comparer. The second part
+		/// will contain all remaining values. These are the bottom \a length - \a count values when
+		/// sorted with \a comparer. The returning views will be contiguous and will span the
+		/// original view. Values within one part are not guaranteed to have any order in place.
+		///
+		/// @param comparer  A callable object which takes two constant references for some value of
+		///                  type \a T and returns a boolean which indicates if the two values are in
+		///                  right order
+		/// @param count     Amount of values in the first part of the partition
+		///
+		/// @note Time complexity is \a count + (\a length - \a count) log(\a count).
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr std::tuple<array_view, array_view> partition_sort (C comparer, std::size_t count)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must not be constant!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
+				"Value of array_view must be nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be nothrow_copy assignable!");
 
-				// boundary case is partition length: length, 0
-				if (count == length)
+			// adjust count if necessary
+			if (count > length)
+				count = length;
+
+			// boundary case is partition length: length, 0
+			if (count == length)
+			{
+				return std::make_tuple(*this, array_view());
+			}
+			// boundary case is partition length: 0, length
+			else if (count == 0)
+			{
+				return std::make_tuple(array_view(), *this);
+			}
+			// target partition which will be bigger,
+			// here it is the first part
+			else if (count * 2 > length)
+			{
+				auto rev_comparer = [&](const auto & a, const auto & b){return comparer(b, a);};
+				build_heap(rev_comparer, 0, count);
+				for (auto index = count; index < length; ++index)
 				{
-					return std::make_tuple(*this, array_view());
-				}
-				// boundary case is partition length: 0, length
-				else if (count == 0)
-				{
-					return std::make_tuple(array_view(), *this);
-				}
-				// target partition which will be bigger,
-				// here it is the first part
-				else if (count * 2 > length)
-				{
-					auto rev_comparer = [&](const auto & a, const auto & b){return comparer(b, a);};
-					build_heap(rev_comparer, 0, count);
-					for (auto index = count; index < length; ++index)
+					if (comparer(values[index], values[0]))
 					{
-						if (comparer(values[index], values[0]))
-						{
-							swap(values[index], index[0]);
-							heapify(rev_comparer, 0, count, 0);
-						}
+						swap(values[index], index[0]);
+						heapify(rev_comparer, 0, count, 0);
 					}
-					const auto pre = array_view(values, count);
-					const auto post = array_view(values + count, length - count);
-					return std::make_tuple(pre, post);
 				}
-				// target partition which will be bigger,
-				// here it is the second part
-				else
-				{
-					build_heap(comparer, count, length);
-					for (auto index = count; index > 0; --index)
-					{
-						if (comparer(values[count], values[index-1]))
-						{
-							swap(values[index-1], values[count]);
-							heapify(comparer, count, end, count);
-						}
-					}
-					const auto pre = array_view(values, count);
-					const auto post = array_view(values + count, length - count);
-					return std::make_tuple(pre, post);
-				}
-			}
-
-
-
-
-			// ------------------------------------------------------------------------------------------
-			// Sorting
-
-			/// Prefix sorting
-			///
-			/// The values will be rearranged into two parts. The first part will contain the \a count
-			/// lowest values in sorted order. The second part will contain the remaining values without
-			/// any guarantee of order. The order is defined by \a comparer and must be strict weak. The
-			/// first and second part will be returned as view. If \a count is bigger than \a length(),
-			/// then the whole view will be sorted.
-			///
-			/// @param comparer  A callable object which takes two constant references of type \a T and
-			///                  returns a boolean indicating if both values are in right order
-			/// @param count     Length of prefix which should be sorted
-			///
-			/// @note Average time complexity is \doctodo
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr std::tuple<array_view, array_view> sort_prefix (C comparer, std::size_t count)
-			{
-				if (count > length)
-					count = length;
-
-				if (count == 0)
-					return std::make_tuple(array_view(), *this);
-
-				min_heap_select(comparer, 0, count, length);
-				pop_total_heap([&](const auto & a, const auto & b){return comparer(b, a);}, 0, count);
 				const auto pre = array_view(values, count);
 				const auto post = array_view(values + count, length - count);
 				return std::make_tuple(pre, post);
 			}
-
-			/// Suffix sorting
-			///
-			/// The values will be rearranged into two parts. The first part will contain the \a length()
-			/// - \a count lowest values without any guarantee of order. The second part will contain the
-			/// \a count greatest values in sorted order. The order is defined by \a comparer and must be
-			/// strict weak. The first and second part will be returned as view.
-			///
-			/// @param comparer
-			/// @param count
-			///
-			/// @note Average time complexity is ...
-			/// @note Worst-case time complexity is ...
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr std::tuple<array_view, array_view> sort_suffix (C comparer, std::size_t count)
+			// target partition which will be bigger,
+			// here it is the second part
+			else
 			{
-				if (count > length)
-					count = length;
-
-				if (count == 0)
-					return std::make_tuple(*this, array_view());
-
-				const auto bound = length - count;
-				max_heap_select(comparer, 0, bound, length);
-				pop_total_heap(comparer, bound, length);
-				reverse(bound, length);
-				const auto pre = array_view(values, bound);
-				const auto post = array_view(values + bound, count);
-				return std::make_tuple(pre, post);
-			}
-
-			/// Nth element sorting
-			///
-			/// Values will be rearranged into two partitions such that the first part contains the \a n
-			/// lowest values and the second part contains the length() - n - 1 greatest values. The
-			/// first part will be placed at the beginning of the view and the second part will be placed
-			/// at the ending of the view, so that value at index \a n corresponds to the value if sorted
-			/// with \a comparer. The order defined by \a comparer must be strict weak. The returning is
-			/// a tuple of the first part, the value at the \a n th position and the second part or an
-			/// empty optional container, if \a n is equal or greater the view's length.
-			///
-			/// @param comparer  A callable object which takes two constant references of type \a T and
-			///                  returns a boolean indicating if both values are in right order
-			///
-			/// @note Average time complexity is ...
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr optional<std::tuple<array_view, const T&, array_view>> sort_nth (C comparer, const std::size_t n)
-			{
-				return make_optional(n < length, [&]()
+				build_heap(comparer, count, length);
+				for (auto index = count; index > 0; --index)
 				{
-					intro_select(comparer, 0, length, n);
-					const auto pre = array_view(values, n);
-					const auto post = array_view(values + n + 1, length - n -1);
-					return std::make_tuple(pre, values[n], post);
-				});
-			}
-
-			/// Unstable sorting
-			///
-			/// Values will be sorted according to order defined by \a comparer. The order must be strict
-			/// weak. Previous orders between values are not guaranteed to be kept after sorting.
-			///
-			/// @param comparer  A callable object which takes two constant references of type \a T and
-			///                  returns a boolean indicating if both values are in right order
-			///
-			/// @note Average time complexity is n*log(n) with n being the length of the view.
-			/// @note Worst-case time complexity is
-			///
-			template <Callable<bool, const T&, const T&> C>
-			constexpr void sort (C comparer)
-			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must be not const!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Value of array_view must be at least nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be at least nothrow copy assignable!");
-
-				if (length > 1)
-				{
-					const auto recursionLimit = lg2(length) * 2;
-					const auto minPartitionLength = 16;
-					intro_sort(comparer, 0, length, recursionLimit, minPartitionLength);
-					for (std::size_t begin = 0; begin < length; begin += minPartitionLength);
+					if (comparer(values[count], values[index-1]))
 					{
-						const auto hypEnd = begin + minPartitionLength;
-						const auto end = hypEnd <= length ? hypEnd : length;
-						insertion_sort(comparer, begin, end);
+						swap(values[index-1], values[count]);
+						heapify(comparer, count, end, count);
 					}
 				}
-			}
-
-			/// Stable sorting
-			template <Callable<bool, const T&, const T&> C>
-			constexpr void sort_stabely (C comparer)
-			{
-				static_assert(not std::is_const<T>::value, "Value of array_view must be not constant!");
-				static_assert(std::is_nothrow_copy_constructible<T>::value,
-					"Value of array_view must be at least nothrow copy constructible!");
-				static_assert(std::is_nothrow_copy_assignable<T>::value,
-					"Value of array_view must be at least nothrow copy assignable!");
-
-				if (length > 1)
-					merge_sort(comparer, 0, length, 16);
-			}
-
-	};
-
-
-
-
-	// ----------------------------------------------------------------------------------------------
-	// Suffix splitting
-
-	template <typename T>
-	constexpr std::tuple<array_view, array_view> array_view<T>::split_suffix (size_t count) const
-	{
-		const auto index = count < length ? (length - count) : 0;
-		const auto pre = array_view(values, index);
-		const auto post = array_view(values + index, length - index);
-		return std::make_tuple(pre, post);
-	}
-
-	template <typename T>
-	template <Callable<bool, T> C>
-	constexpr std::tuple<array_view, array_view> array_view<T>::split_suffix (C predictor) const
-	{
-		auto index = length;
-		while (index > 0)
-		{
-			--index;
-			if (not predictor(values[index])
-			{
-				++index;
-				break;
+				const auto pre = array_view(values, count);
+				const auto post = array_view(values + count, length - count);
+				return std::make_tuple(pre, post);
 			}
 		}
-		return std::make_tuple(array_view(values, index), array_view(values + index, length - index));
-	}
 
-	template <typename T>
-	template <ReversibleBoundedSequence<T> S>
-	constexpr std::tuple<array_view, array_view, S> array_view<T>::split_suffix (S sequence) const
-	{
-		auto folding = fold_reverse([&](auto index, auto element)
+
+
+
+		/// Prefix sorting
+		///
+		/// The values will be rearranged into two parts. The first part will contain the \a count
+		/// lowest values in sorted order. The second part will contain the remaining values without
+		/// any guarantee of order. The order is defined by \a comparer and must be strict weak. The
+		/// first and second part will be returned as view. If \a count is bigger than \a length(),
+		/// then the whole view will be sorted.
+		///
+		/// @param comparer  A callable object which takes two constant references of type \a T and
+		///                  returns a boolean indicating if both values are in right order
+		/// @param count     Length of prefix which should be sorted
+		///
+		/// @note Average time complexity is \doctodo
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr std::tuple<array_view, array_view> sort_prefix (C comparer, std::size_t count)
 		{
-			const auto isEquivalent = index > 0 and values[index - 1] == element;
-			const auto nextIndex = index - isEquivalent ? 1 : 0;
-			return std::make_tuple(nextIndex, isEquivalent);
-		}, length, std::move(sequence));
-		const auto pre = array_view(values, std::get<0>(folding));
-		const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
-		return std::make_tuple(pre, post, std::move(std::get<1>(folding));
-	}
+			if (count > length)
+				count = length;
 
+			if (count == 0)
+				return std::make_tuple(array_view(), *this);
 
-	template <typename T>
-	template <ReversibleBoundedSequence<T> S, Callable<bool, T, sequence_type_t<S> C>
-	constexpr std::tuple<array_view, array_view, S> array_view<T>::split_suffix (C matcher, S sequence) const
-	{
-		auto folding = fold_reverse([&](auto index, auto element)
+			min_heap_select(comparer, 0, count, length);
+			pop_total_heap([&](const auto & a, const auto & b){return comparer(b, a);}, 0, count);
+			const auto pre = array_view(values, count);
+			const auto post = array_view(values + count, length - count);
+			return std::make_tuple(pre, post);
+		}
+
+		/// Suffix sorting
+		///
+		/// The values will be rearranged into two parts. The first part will contain the \a length()
+		/// - \a count lowest values without any guarantee of order. The second part will contain the
+		/// \a count greatest values in sorted order. The order is defined by \a comparer and must be
+		/// strict weak. The first and second part will be returned as view.
+		///
+		/// @param comparer
+		/// @param count
+		///
+		/// @note Average time complexity is ...
+		/// @note Worst-case time complexity is ...
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr std::tuple<array_view, array_view> sort_suffix (C comparer, std::size_t count)
 		{
-			const auto isEquivalent = index > 0 and matcher(values[index - 1], element);
-			const auto nextIndex = index - isEquivalent ? 1 : 0;
-			return std::make_tuple(nextIndex, isEquivalent);
-		}, length, std::move(sequence));
-		const auto pre = array_view(values, std::get<0>(folding));
-		const auto post = array_view(values + std::get<0>(folding), length - std::get<0>(folding));
-		return std::make_tuple(pre, post, std::move(std::get<1>(folding));
-	}
+			if (count > length)
+				count = length;
 
+			if (count == 0)
+				return std::make_tuple(*this, array_view());
 
-	template <typename T>
-	template <BoundedSequence<T> S>
-	constexpr std::tuple<array_view, array_view, bounded_ntaker<S>> array_view<T>::split_suffix (S sequence) const
-	{
-		// TODO implementation
-	}
+			const auto bound = length - count;
+			max_heap_select(comparer, 0, bound, length);
+			pop_total_heap(comparer, bound, length);
+			reverse(bound, length);
+			const auto pre = array_view(values, bound);
+			const auto post = array_view(values + bound, count);
+			return std::make_tuple(pre, post);
+		}
 
+		/// Nth element sorting
+		///
+		/// Values will be rearranged into two partitions such that the first part contains the \a n
+		/// lowest values and the second part contains the length() - n - 1 greatest values. The
+		/// first part will be placed at the beginning of the view and the second part will be placed
+		/// at the ending of the view, so that value at index \a n corresponds to the value if sorted
+		/// with \a comparer. The order defined by \a comparer must be strict weak. The returning is
+		/// a tuple of the first part, the value at the \a n th position and the second part or an
+		/// empty optional container, if \a n is equal or greater the view's length.
+		///
+		/// @param comparer  A callable object which takes two constant references of type \a T and
+		///                  returns a boolean indicating if both values are in right order
+		///
+		/// @note Average time complexity is ...
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr optional<std::tuple<array_view, const T&, array_view>> sort_nth (C comparer, const std::size_t n)
+		{
+			return make_optional(n < length, [&]()
+			{
+				intro_select(comparer, 0, length, n);
+				const auto pre = array_view(values, n);
+				const auto post = array_view(values + n + 1, length - n -1);
+				return std::make_tuple(pre, values[n], post);
+			});
+		}
+
+		/// Unstable sorting
+		///
+		/// Values will be sorted according to order defined by \a comparer. The order must be strict
+		/// weak. Previous orders between values are not guaranteed to be kept after sorting.
+		///
+		/// @param comparer  A callable object which takes two constant references of type \a T and
+		///                  returns a boolean indicating if both values are in right order
+		///
+		/// @note Average time complexity is n*log(n) with n being the length of the view.
+		/// @note Worst-case time complexity is
+		///
+		template <Callable<bool, const T&, const T&> C>
+		constexpr void sort (C comparer)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must be not const!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
+				"Value of array_view must be at least nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be at least nothrow copy assignable!");
+
+			if (length > 1)
+			{
+				const auto recursionLimit = lg2(length) * 2;
+				const auto minPartitionLength = 16;
+				intro_sort(comparer, 0, length, recursionLimit, minPartitionLength);
+				for (std::size_t begin = 0; begin < length; begin += minPartitionLength);
+				{
+					const auto hypEnd = begin + minPartitionLength;
+					const auto end = hypEnd <= length ? hypEnd : length;
+					insertion_sort(comparer, begin, end);
+				}
+			}
+		}
+
+		/// Stable sorting
+		template <Callable<bool, const T&, const T&> C>
+		constexpr void sort_stabely (C comparer)
+		{
+			static_assert(not std::is_const<T>::value, "Value of array_view must be not constant!");
+			static_assert(std::is_nothrow_copy_constructible<T>::value,
+				"Value of array_view must be at least nothrow copy constructible!");
+			static_assert(std::is_nothrow_copy_assignable<T>::value,
+				"Value of array_view must be at least nothrow copy assignable!");
+
+			if (length > 1)
+				merge_sort(comparer, 0, length, 16);
+		}
+
+	};
 
 }
 
