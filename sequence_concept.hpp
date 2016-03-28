@@ -713,6 +713,65 @@ namespace stdext
 
 
 
+
+
+	/// Prediction based take sequencer for bounded sequence
+	///
+	/// The prediction based take sequencer takes all initial elements of a bounded sequence which are
+	/// conform with a predictor.
+	template <BoundedSequence S, Callable<bool, sequence_type_t<S>> C>
+	class bounded_taker
+	{
+
+	private:
+
+		S sequence;
+		C predictor;
+
+	public:
+
+		/// Sequence type of the underlying sequence
+		using value_type = sequence_type_t<S>;
+
+		/// Attribute constructor
+		///
+		/// The take sequencer will be constructed with the \a sequence and the \a predictor.
+		constexpr bounded_taker (S sequence, C predictor)
+			noexcept(std::is_nothrow_move_constructible<S>::value and std::is_nothrow_move_constructible<C>::value)
+			: sequence(std::move(sequence)), predictor(std::move(predictor))
+		{}
+
+		/// Prefix decomposition
+		///
+		/// If the sequence is not empty or the next element is not conform with the prediction, then an
+		/// empty optional container will be returned. If the view is not empty and the next element is
+		/// conform with the prediction, then it will be returned along with a sequencer for the remaining
+		/// elements in the sequence.
+		////
+		constexpr optional<std::tuple<value_type, bounded_taker>> decompose () const
+		{
+			return mbind([&predictor](auto decomposition)
+			{
+				return make_optional(predictor(std::get<0>(demposition)), [&predictor](auto head, auto tails)
+				{
+					return std::make_tuple(std::move(head), bounded_taker(std::move(tails), predictor));
+				}, std::move(std::get<0>(decomposition)), std::move(std::get<1>(decomposition)));
+			}, sequence.decompose());
+		}
+
+		/// Emptiness
+		///
+		/// If the sequence is empty or the next element in the sequence is not conform with the
+		/// prediction, then it will return true. Otherwise it will return false.
+		///
+		friend constexpr bool empty (bounded_taker sequencer)
+		{
+			
+		}
+
+	};
+
+
 }
 
 #endif
