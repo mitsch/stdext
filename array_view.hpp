@@ -842,6 +842,126 @@ namespace stdext
 		}
 
 
+		/// TODO documentation
+		template <BoundedSequence<T> S>
+		constexpr std::tuple<optional<T>, array_view, array_view> break_prefix (S sequence) const
+		{
+			// TODO test T on equivalence comparability
+			for (size_t index = 0; index < length; ++index)
+			{
+				auto folding = sequence.fold([&index, &values](auto, auto element)
+				{
+					const auto isEquivalent = values[index] == element;
+					return std::make_tuple(isEquivalent, not isEquivalent);
+				}, false);
+				if (std::get<0>(folding))
+				{
+					const auto pre = array_view(values, index);
+					const auto post = array_view(values + index + 1, length - index - 1);
+					return std::make_tuple(make_optional(values[index]), pre, post);
+				}
+			}
+			return std::make_optional(optional<T>(), *this, array_view());
+		}
+
+		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> M>
+		constexpr std::tuple<optional<sequence_type_t<S>>, array_view, array_view> break_prefix (M matcher, S sequence) const
+		{
+			for (size_t index = 0; index < length; ++index)
+			{
+				auto folding = sequence.fold([&index, &values, &matcher](auto, auto element)
+				{
+					const auto isEquivalent = matcher(values[index], element);
+					return std::make_tuple(make_optional_if(isEquivalent, std::move(element)), not isEquivalent);
+				}, optional<sequence_type_t>());
+				if (not std::get<0>(folding).empty())
+				{
+					const auto pre = array_view(values, index);
+					const auto post = array_view(values + index + 1, length - index - 1);
+					return std::make_tuple(std::move(std::get<0>(folding)), pre, post);
+				}
+			}
+			return std::make_optional(optional<sequence_type_t<S>>(), *this, array_view());
+		}
+
+		template <Callable_<T, array_view, array_view> M>
+			requires is_optional_v<result_of_t<M(T, array_view, array_view)>>
+		constexpr result_of_t<M(T, array_view, array_view)> break_prefix (M matcher) const
+		{
+			for (size_t index = 0; index < length; ++index)
+			{
+				const auto pre = array_view(values, index);
+				const auto post = array_view(values + index + 1, length - index - 1);
+				auto matching = matcher(values[index], pre, post);
+				if (not matching.empty())
+				{
+					return matching;
+				}
+			}
+			return result_of_t<M(T, array_view, array_view)>();
+		}
+
+		/// TODO documentation
+		template <BoundedSequence<T> S>
+		constexpr std::tuple<optional<T>, array_view, array_view> break_suffix (S sequence) const
+		{
+			// TODO test T on equivalence comparability
+			size_t index = length;
+			while (index-- > 0)
+			{
+				auto folding = sequence.fold([&index, &values](auto, auto element)
+				{
+					const auto isEquivalent = values[index] == element;
+					return std::make_tuple(isEquivalent, not isEquivalent);
+				}, false);
+				if (std::get<0>(folding))
+				{
+					const auto pre = array_view(values, index);
+					const auto post = array_view(values + index + 1, length - index - 1);
+					return std::make_tuple(make_optional(values[index]), pre, post);
+				}
+			}
+			return std::make_optional(optional<T>(), array_view(), *this);
+		}
+
+		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> M>
+		constexpr std::tuple<optional<sequence_type_t<S>>, array_view, array_view> break_prefix (M matcher, S sequence) const
+		{
+			size_t index = length;
+			while (index-- > 0);
+			{
+				auto folding = sequence.fold([&index, &values, &matcher](auto, auto element)
+				{
+					const auto isEquivalent = matcher(values[index], element);
+					return std::make_tuple(make_optional_if(isEquivalent, std::move(element)), not isEquivalent);
+				}, optional<sequence_type_t>());
+				if (not std::get<0>(folding).empty())
+				{
+					const auto pre = array_view(values, index);
+					const auto post = array_view(values + index + 1, length - index - 1);
+					return std::make_tuple(std::move(std::get<0>(folding)), pre, post);
+				}
+			}
+			return std::make_optional(optional<sequence_type_t<S>>(), *this, array_view());
+		}
+
+		template <Callable_<T, array_view, array_view> M>
+			requires is_optional_v<result_of_t<M(T, array_view, array_view)>>
+		constexpr result_of_t<M(T, array_view, array_view)> break_prefix (M matcher) const
+		{
+			size_t index = length;
+			while (index-- > 0)
+			{
+				const auto pre = array_view(values, index);
+				const auto post = array_view(values + index + 1, length - index - 1);
+				auto matching = matcher(values[index], pre, post);
+				if (not matching.empty())
+				{
+					return matching;
+				}
+			}
+			return result_of_t<M(T, array_view, array_view)>();
+		}
 
 
 		/// Forward transformation
