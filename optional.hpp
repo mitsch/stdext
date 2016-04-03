@@ -164,9 +164,18 @@ namespace stdext
 			template <typename C, typename ... As>
 				requires Callable_<C, T, As ...> and
 				         not std::is_void<std::result_of_t<C(T, As ...)>>::value
-			constexpr auto fmap (C mapper, As ... arguments) const
+			constexpr auto map (C mapper, As ... arguments) const
 			{
 				using U = std::result_of_t<C(T, As ...)>;
+				return initialised ? optional<U>(mapper(value, std::move(arguments) ...)) : optional<U>();
+			}
+
+			template <typename C, typename ... As>
+				requires Callable_<C, T, As ...> and
+				         not std::is_void<std::result_of_t<C(T&, As ...)>>::value
+			constexpr auto map (C mapper, As ... arguments)
+			{
+				using U = std::result_of_t<C(T&, As ...)>;
 				return initialised ? optional<U>(mapper(value, std::move(arguments) ...)) : optional<U>();
 			}
 
@@ -191,72 +200,92 @@ namespace stdext
 			}
 
 
-			
-			template <typename M, typename D, typename ... As>
-				requires Callable_<M, T, As ...> and
-				         Callable_<D, As ...> and
-								 not std::is_void<std::result_of_t<M(T, As ...)>>::value and
-								 not std::is_void<std::result_of_t<D(As ...)>>::value and
-								 requires(){std::common_type<std::result_of_t<M(T, As ...)>, std::result_of_t<D(As ...)>>::type}
-			constexpr auto decide (C mover, D defaulter, As ... arguments) const
-			{
-				return initialised ? mover(value, std::move(arguments) ...) : defaulter(std::move(arguments) ...);
-			}
+		
 
-			template <typename M, typename D, typename ... As>
-				requires Callable_<M, T, As ...> and
-				         Callable_<D, As ...> and
-								 not std::is_void<std::result_of_t<M(T, As ...)>>::value and
-								 not std::is_void<std::result_of_t<D(As ...)>>::value and
-								 requires(){std::common_type<std::result_of_t<M(T, As ...)>, std::result_of_t<D(As ...)>>::type}
-			constexpr auto decide (C mover, D defaulter, optional && value, As ... arguments) const
+			template <typename H, typename M, typename ... As>
+				requires Callable_<H, T&, As ...> and
+				         Callable_<M, As ...> and
+				         not std::is_void_v<std::result_of_t<H(T&, As ...)>> and
+				         not std::is_void_v<std::result_of_t<M(As ...)>> and
+				         requires(){typedef std::common_type<std::result_of_t<H(T&, As ...)>, std::result_of_t<M(As ...)>>::type;}
+			constexpr auto decide (H hitter, M misser, As ... arguments)
 			{
-				const auto initialised = value.initialised;
-				value.initialised = false;
-				return initialised ? mover(std::move(value.value), std::move(arguments) ...) : defaulter(std::move(arguments) ...);
-			}
-
-			template <typename M, typename D, typename ... As>
-				requires Callable_<M, T, As ...> and
-				         Callable_<D, As ...> and
-								 not std::is_void<std::result_of_t<M(T, As ...)>>::value and
-								 not std::is_void<std::result_of_t<D(As ...)>>::value and
-								 requires(){std::common_type<std::result_of_t<M(T, As ...)>, std::result_of_t<D(As ...)>>::type}
-			constexpr auto decide (C mover, D defaulter, const optional & value, As ... arguments) const
-			{
-				return value.initialised ? mover(value.value, std::move(arguments) ...) : defaulter(std::move(arguments) ...);
-			}
-
-
-			
-			template <typename C, typename ... As>
-				requires Callable_<C, T, As ...> and
-				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			constexpr auto mbind (C mapper, As ... arguments) const
-			{
-				using U = std::result_of_t<C(T, As ...)>;
-				return initialised ? mapper(value, std::move(arguments) ...) : U();
-			}
-
-			template <typename C, typename ... As>
-				requires Callable_<C, T, As ...> and
-				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			friend constexpr auto mbind (C mapper, optional && value, As ... arguments) const
-			{
-				using U = std::result_of_t<C(T, As ...)>;
-				const auto initialised = value.initialised;
-				value.initialised = false;
-				return initialised ? mapper(value, std::move(arguments) ...) : U();
+				return initialised ? hitter(value, std::move(arguments) ...) : misser(std::move(arguments) ...);
 			}
 			
-			template <typename C, typename ... As>
-				requires Callable_<C, T, As ...> and
-				        is_tuple_v<std::result_of_t<C(T, As ...)>>
-			friend constexpr auto mbind (C mapper, const optional & value, As ... arguments) const
+			template <typename H, typename M, typename ... As>
+				requires Callable_<H, T, As ...> and
+				         Callable_<M, As ...> and
+				         not std::is_void_v<std::result_of_t<H(T, As ...)>> and
+				         not std::is_void_v<std::result_of_t<M(As ...)>> and
+				         requires(){typedef std::common_type<std::result_of_t<H(T, As ...)>, std::result_of_t<M(As ...)>>::type;}
+			constexpr auto decide (H hitter, M misser, As ... arguments) const
 			{
-				using U = std::result_of_t<C(T, As ...)>;
-				return value.initialised ? mapper(value, std::move(arguments) ...) : U();
+				return initialised ? hitter(value, std::move(arguments) ...) : misser(std::move(arguments) ...);
 			}
+
+			template <typename H, typename M, typename ... As>
+				requires Callable_<H, T, As ...> and
+				         Callable_<M, As ...> and
+				         not std::is_void_v<std::result_of_t<H(T, As ...)>> and
+				         not std::is_void_v<std::result_of_t<M(As ...)>> and
+				         requires(){typedef std::common_type<std::result_of_t<H(T, As ...)>, std::result_of_t<M(As ...)>>::type;}
+			friend constexpr auto decide (H hitter, M misser, const optional & opt, As ... arguments)
+			{
+				return opt.initialised ? hitter(opt.value, std::move(arguments) ...) : misser(std::move(arguments) ...);
+			}
+
+			template <typename H, typename M, typename ... As>
+				requires Callable_<H, T, As ...> and
+				         Callable_<M, As ...> and
+				         not std::is_void_v<std::result_of_t<H(T, As ...)>> and
+				         not std::is_void_v<std::result_of_t<M(As ...)>> and
+				         requires(){typedef std::common_type<std::result_of_t<H(T, As ...)>, std::result_of_t<M(As ...)>>::type;}
+			friend constexpr auto decide (H hitter, M misser, optional && opt, As ... arguments)
+			{
+				return opt.initialised ? hitter(std::move(opt.value), std::move(arguments) ...) : misser(std::move(arguments) ...);
+			}
+
+
+
+
+			template <typename B, typename ... As>
+				requires Callable_<B, T, As ...> and
+				         is_tuple_v<std::result_of_t<B(T, As ...)>>
+			constexpr auto bind (B binder, As ... arguments) const
+			{
+				using U = std::result_of_t<B(T, As ...)>;
+				return initialised ? binder(value, std::move(arguments) ... ) : U();
+			}
+
+			template <typename B, typename ... As>
+				requires Callable_<B, T&, As ...> and
+				         is_tuple_v<std::result_of_t<B(T&, As ...)>>
+			constexpr auto bind (B binder, As ... arguments)
+			{
+				using U = std::result_of_t<B(T&, As ...)>;
+				return initialised ? binder(value, std::move(arguments) ... ) : U();
+			}
+
+			template <typename B, typename ... As>
+				requires Callable_<B, T, As ...> and
+				         is_tuple_v<std::result_of_t<B(T, As ...)>>
+			friend constexpr auto bind (B binder, const optional & opt, As ... arguments)
+			{
+				using U = std::result_of_t<B(T, As ...)>;
+				return opt.initialised ? binder(opt.value, std::move(arguments) ... ) : U();
+			}
+
+			template <typename B, typename ... As>
+				requires Callable_<B, T, As ...> and
+				         is_tuple_v<std::result_of_t<B(T, As ...)>>
+			friend constexpr auto bind (B binder, optional && opt, As ... arguments)
+			{
+				using U = std::result_of_t<B(T, As ...)>;
+				return opt.initialised ? binder(std::move(opt.value), std::move(arguments) ... ) : U();
+			}
+
+			
 
 
 
@@ -334,6 +363,11 @@ namespace stdext
 	template <typename T> constexpr optional<T> make_optional (T t)
 	{
 		return optional<T>(std::move(t));
+	}
+
+	template <typename T> constexpr optional<T> make_optional_if (const bool conditional, T object)
+	{
+		return conditional ? optional<T>(std::move(object)) : optional<T>();
 	}
 
 	template <typename C, typename ... Args>
