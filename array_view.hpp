@@ -453,6 +453,11 @@ namespace stdext
 			assert(values != nullptr or count == 0);
 		}
 
+		constexpr array_view (std::initializer_list<T> values)
+			noexcept
+			: values(values.begin()), length(values.size())
+		{}
+
 
 		/// Returns whether the view is empty, that is it sees no elements
 		constexpr bool empty () const
@@ -1901,6 +1906,8 @@ namespace stdext
 		}
 
 	};
+
+
 
 }
 
