@@ -50,6 +50,29 @@ namespace stdext
 			return holder<T, Vs ...>().fold(std::move(combine), std::move(value), args ...);
 		}
 
+		template <typename C, typename V>
+		constexpr auto compose (C caller, V init) const
+		{
+			template <typename U, U ... us> struct holder;
+			template <typename U, U u, U ... us> struct holder<U, u, us ...>
+			{
+				constexpr auto compose (auto value) const
+				{
+					const auto nextHolder = holder<U, us ...>();
+					return nextHolder.compose(caller(std::move(value), integral_constant<U, u>()));
+				}
+			};
+			template <typename U> struct holder<U>
+			{
+				constexpr auto compose (auto value) const
+				{
+					return value;
+				}
+			};
+
+			return holder<T, Vs ...>().compose(std::move(init));
+		}
+
 		/// Applies all values in \a Vs and all values in \a args as parameters on functor object \a f
 		/// in following order: first, all values in \a args and then all values of \a Vs are positioned.
 		/// The values of \a Vs are embedded in instances of typed_value<T>.
@@ -77,6 +100,8 @@ namespace stdext
 		{
 			return f(integral_constant<T, Vs>() ..., std::forward<Args>(args) ...);
 		}
+
+
 
 	};
 
