@@ -22,7 +22,8 @@ namespace stdext
 			return value;
 		}
 
-		constexpr value_type operator () () const noexcept
+		template <typename ... Ts>
+		constexpr value_type operator () (Ts && ...) const noexcept
 		{
 			return value;
 		}
