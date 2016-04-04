@@ -842,7 +842,18 @@ namespace stdext
 		}
 
 
-		/// TODO documentation
+
+
+
+		/// Forward breaking based on delimiter set
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part before
+		/// the first occurrence of any element of \a sequence in the view. The second part will be the
+		/// succeeding part after the first occurrence of any element of \a sequence in the view. The
+		/// found element will be returned along with the first and the second part. The elements of \a
+		/// sequence and the values of the view will be tested on equivalence with the default
+		/// equivalence operator.
+		///
 		template <BoundedSequence<T> S>
 		constexpr std::tuple<optional<T>, array_view, array_view> break_prefix (S sequence) const
 		{
@@ -864,6 +875,14 @@ namespace stdext
 			return std::make_optional(optional<T>(), *this, array_view());
 		}
 
+		/// Forward breaking based on delimiter set with custom matcher
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part before
+		/// the first occurrence of any element of \a sequence in the view. The second part will be the
+		/// succeeding part after the first occurrence of any element of \a sequence in the view. The
+		/// found element will be returned along with the first and the second part. The elements of \a
+		/// sequence and the values of the view will be tested on equivalence with \a matcher.
+		///
 		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> M>
 		constexpr std::tuple<optional<sequence_type_t<S>>, array_view, array_view> break_prefix (M matcher, S sequence) const
 		{
@@ -884,6 +903,14 @@ namespace stdext
 			return std::make_optional(optional<sequence_type_t<S>>(), *this, array_view());
 		}
 
+		/// Forward breaking based on matcher
+		///
+		/// The view will be traversed from the beginning to the end. For each value, the \a matcher
+		/// will be called with the value, a view onto the preceeding values and a view onto the
+		/// succeeding values. The traversion will be stopped as soon as soon as \a matcher returns a
+		/// non empty optional container. If \a matcher will only return empty optional container, an
+		/// empty optional container will be returned.
+		///
 		template <Callable_<T, array_view, array_view> M>
 			requires is_optional_v<result_of_t<M(T, array_view, array_view)>>
 		constexpr result_of_t<M(T, array_view, array_view)> break_prefix (M matcher) const
@@ -901,7 +928,68 @@ namespace stdext
 			return result_of_t<M(T, array_view, array_view)>();
 		}
 
-		/// TODO documentation
+		/// Forward breaking based on delimiter sequence
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part before
+		/// the first occurrence of \a sequence in the view. The second part will be the succeeding
+		/// part after the first occurrence of \a sequence in the view. If the \a sequence is found, a
+		/// true flag will be returned along with the first and the second part. If the \a sequence is
+		/// not found, a false flag will be returned along with the original view and an empty view. If
+		/// the \a sequence is empty, a true flag will be returned along with the original view and an
+		/// empty view.
+		///
+		template <BoundedSequence S<T>>
+		constexpr std::tuple<bool, array_view, array_view> break_sub_prefix (S sequence) const
+		{
+			// TODO there is a more efficient linear substring search, but simple approach is correct as well
+			return decide([&](auto decomposition)
+			{
+				auto decompostion = break_prefix([&decomposition](auto && middle, array_view pre, array_view post)
+				{
+					if (middle == std::get<0>(decomposition))
+					{
+						auto splitting = post.split_prefix(std::get<1>(decomposition));
+						if (std::get<2>(splitting).empty())
+						{
+							return make_optional(std::make_tuple(pre, std::get<1>(splitting)));
+						}
+						else
+						{
+							return optional<std::tuple<array_view, array_view>>();
+						}
+					}
+					else
+					{
+						return optional<std::tuple<array_view, array_view>>();
+					}
+				});
+				return decomposition.decide([](auto decomposition)
+				{
+					return std::tuple_cat(std::tie(true), decomposition);
+				}, [&this]()
+				{
+					return std::make_tuple(false, *this, array_view());
+				});
+			}, [&this]()
+			{
+				return std::make_tuple(true, *this, array_view());
+			}, sequence.decompose());
+		}
+
+
+
+
+
+		
+		/// Backward breaking based on delimiter set
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part of the
+		/// last occurrence of any element of \a sequence in the view. The second part will be the
+		/// succeeding part of the last occurrence of any element of \a sequence in the view. The
+		/// found element will be returned along with the first and the second part. The elements of \a
+		/// sequence and the values of the view will be tested on equivalence with the default
+		/// equivalence operator.
+		///
 		template <BoundedSequence<T> S>
 		constexpr std::tuple<optional<T>, array_view, array_view> break_suffix (S sequence) const
 		{
@@ -924,6 +1012,14 @@ namespace stdext
 			return std::make_optional(optional<T>(), array_view(), *this);
 		}
 
+		/// Backward breaking based on delimiter set with custom matcher
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part of the
+		/// last occurrence of any element of \a sequence in the view. The second part will be the
+		/// succeeding part of the last occurrence of any element of \a sequence in the view. The
+		/// found element will be returned along with the first and the second part. The elements of \a
+		/// sequence and the values of the view will be tested on equivalence with \a matcher.
+		///
 		template <BoundedSequence S, Callable<bool, T, sequence_type_t<S>> M>
 		constexpr std::tuple<optional<sequence_type_t<S>>, array_view, array_view> break_prefix (M matcher, S sequence) const
 		{
@@ -945,9 +1041,17 @@ namespace stdext
 			return std::make_optional(optional<sequence_type_t<S>>(), *this, array_view());
 		}
 
+		/// Backward breaking based on matcher
+		///
+		/// The view will be traversed from the end to the beginning. For each value, the \a matcher
+		/// will be called with the value, a view onto the preceeding values and a view onto the
+		/// succeeding values. The traversion will be stopped as soon as soon as \a matcher returns a
+		/// non empty optional container. If \a matcher will only return empty optional container, an
+		/// empty optional container will be returned.
+		///
 		template <Callable_<T, array_view, array_view> M>
 			requires is_optional_v<result_of_t<M(T, array_view, array_view)>>
-		constexpr result_of_t<M(T, array_view, array_view)> break_prefix (M matcher) const
+		constexpr result_of_t<M(T, array_view, array_view)> break_suffix (M matcher) const
 		{
 			size_t index = length;
 			while (index-- > 0)
@@ -962,6 +1066,49 @@ namespace stdext
 			}
 			return result_of_t<M(T, array_view, array_view)>();
 		}
+
+		/// Backward breaking based on delimiter sequence
+		///
+		/// The view will be broken into two parts. The first part will be the preceeding part before
+		/// the first occurrence of \a sequence in the view. The second part will be the succeeding
+		/// part after the first occurrence of \a sequence in the view. If the \a sequence is found, a
+		/// true flag will be returned along with the first and the second part. If the \a sequence is
+		/// not found, a false flag will be returned along with the original view and an empty view. If
+		/// the \a sequence is empty, a true flag will be returned along with the original view and an
+		/// empty view.
+		///
+		template <BoundedSequence S<T>>
+		constexpr std::tuple<bool, array_view, array_view> break_sub_suffix (S sequence) const
+		{
+			const auto decomposition = sequence.decompose();
+			return decomposition.decide([&](auto decomposition)
+			{
+				const auto matching = this->break_suffix([&decomposition](auto middle, array_view pre, array_view post)
+				{
+					const auto splitting = post.split_prefix(std::get<1>(decomposition));
+					const auto isMatch = middle == std::get<0>(decomposition) and std::get<2>(splitting).empty();
+					return make_optional(isMatch, [&]()
+					{
+						// this is a little dirty, but so far the simplest solution
+						const auto middle = array_view(values + pre.length(), length() - pre.length() - std::get<1>(splitting).length());
+						return std::make_tuple(middle, pre, std::get<1>(splitting));
+					});
+				});
+				return matching.decide([](auto matching)
+				{
+					return matching
+				}, [&]()
+				{
+					return std::make_tuple(optional<array_view>(), array_view(), *this);
+				});
+			}, []()
+			{
+				return std::make_tuple(array_view(), *this, array_view());
+			});
+		}
+
+
+
 
 
 		/// Forward transformation
