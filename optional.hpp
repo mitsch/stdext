@@ -10,6 +10,9 @@
 namespace stdext
 {
 
+	struct {} nullopt;
+
+
 	/// Optionally initialised value
 	///
 	/// The container holds at most one value. It can be used to express that some value might not
@@ -33,6 +36,13 @@ namespace stdext
 			///
 			/// Constructs an empty optional container
 			constexpr optional () noexcept
+				: initialised(false)
+			{}
+
+			/// Empty constructor
+			///
+			/// Constructs an empty optional container
+			constexpr optional (nullopt) noexcept
 				: initialised(false)
 			{}
 
