@@ -29,7 +29,6 @@ namespace stdext
 		}
 	};
 
-
 	template <bool value> using bool_constant = integral_constant<bool, value>;
 	using true_type = bool_constant<true>;
 	using false_type = bool_constant<false>;
@@ -54,7 +53,23 @@ namespace stdext
 	template <typename T> auto negate_v = negate<T>::value;
 
 
-	template <std::size_t N> using index_constant = integral_constant<std::size_t, N>;
+	template <size_t N> using index_constant = integral_constant<size_t, N>;
+
+	template <size_t A, char ... Bs> struct index_constant_counter {using type = index_constant<A>;};
+	template <size_t A, char B, char ... Bs> struct index_constant_counter : index_constant<A * 10 + (B - '0'), Bs ...> {};
+
+	template <char ... Cs> constexpr auto operator "" _i ()
+	{
+		return index_constant_counter<0, Cs ...>::type();
+	}
+
+	template <size_t A, size_t B> constexpr index_constant<A + b> operator + (index_constant<A>, index_constant<B>)
+	{
+		return index_constant<A + B>();
+	}
+
+	template <typename T> struct is_integral_constant : false_type {};
+	template <typename T, T value> struct is_integral_constant<integral_constant<T, value>> : true_type {};
 
 }
 
