@@ -18,213 +18,220 @@ namespace stdext
 	class text_view
 	{
 	
-		private:
-
-			array_view<const char> encoding;
-			mbstate_t state;
-
-		public:
-
-
-			/// Attribute constructor
-			///
-			/// Thew view is constructed with a view on the underlying \a bytes.
-			constexpr text_view (array_view<const char> encoding, mbstate_t state)
-				: encoding(encoding), state(std::move(state))
-				noexcept
-			{}
-
-			/// C-String constructor
-			///
-			/// The view is constructed with a null terminated byte string, also known as C-string. The
-			/// view will include all characters until the null terminating byte which will be excluded
-			/// from the view.
-			///
-			/// @param characters  Null terminated byte string which will be viewed
-			constexpr text_view (const char * characters)
-				: text_view (characters, std::strlen(characters))
-				noexcept
-			{}
-
-
-
-			/// Decomposition
-			constexpr optional<std::tuple<char32_t, text_view>> operator () () const;
-
-
-			/// Swapping
-			friend constexpr void swap (text_view & first, text_view & second)
-			{
-				using std::swap;
-				swap(first.encoding, second.encoding);
-				swap(first.state, second.state);
-			}
-
-
-			/// Non-Emptiness
-			constexpr bool operator () const
-			{
-				return encoding;
-			}
-
-
-			/// Length in characters
-			constexpr size_t length () const;
-
-
-			/// Length in bytes
-			constexpr size_t raw_length () const
-			{
-				return encoding.length();
-			}
-
-
-			/// Data pointer to byte encoding
-			constexpr const unsigned char* raw_data () const
-			{
-				return static_cast<const unsigned char*>(encoding.data());
-			}
-
-			/// Encoding view
-			constexpr array_view<const unsigned char*> raw_view () const
-			{
-				return array_view<const unsigned char>(raw_data(), raw_length());
-			}
-
-
-
-			// ----------------------------------------
-			// Folding
-
-			template <typename V, Callable<V, V, char32_t> C>
-			constexpr V fold (C combiner, V value) const;
-
-			template <typename V, Callable<std::tuple<V, bool>, V, char32_t> C>
-			constexpr std::tuple<V, text_view, text_view> fold (C combiner, V value) const;
-
-
-
-
-			// ----------------------------------------
-			// Matching
-
-			template <BoundedSequence<char32_t> S>
-			constexpr bool match_prefix (S prefix) const
-			{
-				const auto splitting = split_prefix(std::move(prefix));
-				return not std::get<2>(splitting);
-			}
-
-			template <BoundedSequence<char32_t> S>
-			constexpr bool match (S other) const
-			{
-				const auto splitting = split_prefix(std::move(other));
-				return not std::get<1>(splitting) and not std::get<2>(splitting);
-			}
-
-			// TODO match_infix
-
-
-
-			// ----------------------------------------
-			// Prefix shrinking
-
-			constexpr void take_prefix (size_t count)
-			{
-				const auto splitting = split_prefix(count);
+	private:
+	
+		array_view<const char> encoding;
+		mbstate_t state;
+	
+	public:
+		
+		/// Attribute constructor
+		///
+		/// Thew view is constructed with a view on the underlying \a bytes.
+		constexpr text_view (array_view<const char> encoding, mbstate_t state)
+			: encoding(encoding), state(std::move(state))
+			noexcept
+		{}
+	
+		/// C-String constructor
+		///
+		/// The view is constructed with a null terminated byte string, also known as C-string. The
+		/// view will include all characters until the null terminating byte which will be excluded
+		/// from the view.
+		///
+		/// @param characters  Null terminated byte string which will be viewed
+		constexpr text_view (const char * characters)
+			: text_view (characters, std::strlen(characters))
+			noexcept
+		{}
+	
+	
+		friend constexpr void swap (text_view & first, text_view & second)
+		{
+			using std::swap;
+			swap(first.encoding, second.encoding);
+			swap(first.state, second.state);
+		}
+		
+		
+		/// Prefix decomposition
+		///
+		/// The next character will be decoded from the text and returned along with a view onto the
+		/// remaining encoded characters of the view.
+		///
+		constexpr optional<std::tuple<char32_t, text_view>> decompose () const
+		{
+			char32_t target;
+			const auto count = std::mbrtoc32(&target, encoding.data(), encoding.length(), );
+		}
+	
+	
+	
+	
+		/// Non-Emptiness
+		constexpr bool operator () const
+		{
+			return encoding;
+		}
+	
+	
+		/// Length in characters
+		constexpr size_t length () const;
+	
+	
+		/// Length in bytes
+		constexpr size_t raw_length () const
+		{
+			return encoding.length();
+		}
+	
+	
+		/// Data pointer to byte encoding
+		constexpr const unsigned char* raw_data () const
+		{
+			return static_cast<const unsigned char*>(encoding.data());
+		}
+	
+		/// Encoding view
+		constexpr array_view<const unsigned char*> raw_view () const
+		{
+			return array_view<const unsigned char>(raw_data(), raw_length());
+		}
+	
+	
+	
+		// ----------------------------------------
+		// Folding
+	
+		template <typename V, Callable<V, V, char32_t> C>
+		constexpr V fold (C combiner, V value) const;
+	
+		template <typename V, Callable<std::tuple<V, bool>, V, char32_t> C>
+		constexpr std::tuple<V, text_view, text_view> fold (C combiner, V value) const;
+	
+	
+	
+	
+		// ----------------------------------------
+		// Matching
+	
+		template <BoundedSequence<char32_t> S>
+		constexpr bool match_prefix (S prefix) const
+		{
+			const auto splitting = split_prefix(std::move(prefix));
+			return not std::get<2>(splitting);
+		}
+	
+		template <BoundedSequence<char32_t> S>
+		constexpr bool match (S other) const
+		{
+			const auto splitting = split_prefix(std::move(other));
+			return not std::get<1>(splitting) and not std::get<2>(splitting);
+		}
+	
+		// TODO match_infix
+	
+	
+	
+		// ----------------------------------------
+		// Prefix shrinking
+	
+		constexpr void take_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			*this = std::get<0>(splitting);
+		}
+	
+		template <Callable<bool, char32_t> C>
+		constexpr void take_prefix (C predictor)
+		{
+			const auto splitting = split_prefix(std::move(predictor));
+			*this = std::get<0>(splitting);
+		}
+	
+		template <Sequence<char32_t> S>
+		constexpr void take_prefix (S other)
+		{
+			const auto splitting = split_prefix(std::move(other));
+			*this = std::get<0>(splitting);
+		}
+	
+		constexpr void drop_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			*this = std::get<1>(splitting);
+		}
+	
+		template <Callable<bool, char32_t> C>
+		constexpr void drop_prefix (C predictor)
+		{
+			const auto splitting = split_prefix(std::move(predictor));
+			*this = std::get<1>(splitting);
+		}
+	
+		template <Sequence<char32_t> S>
+		constexpr void drop_prefix (S other)
+		{
+			const auto splitting = split_prefix(std::move(other));
+			*this = std::get<1>(splitting);
+		}
+	
+	
+	
+	
+		// ----------------------------------------
+		// Prefix shrinking trial
+	
+		constexpr bool try_take_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			if (std::get<2>(splitting) == count)
 				*this = std::get<0>(splitting);
-			}
-
-			template <Callable<bool, char32_t> C>
-			constexpr void take_prefix (C predictor)
-			{
-				const auto splitting = split_prefix(std::move(predictor));
+			return std::get<2>(splitting) == count;
+		}
+	
+		template <BoundedSequence<char32_t> S>
+		constexpr bool try_take_prefix (S other)
+		{
+			const auto splitting = split_prefix(std::move(other));
+			if (not std::get<2>(splitting))
 				*this = std::get<0>(splitting);
-			}
-
-			template <Sequence<char32_t> S>
-			constexpr void take_prefix (S other)
-			{
-				const auto splitting = split_prefix(std::move(other));
-				*this = std::get<0>(splitting);
-			}
-
-			constexpr void drop_prefix (size_t count)
-			{
-				const auto splitting = split_prefix(count);
+			return not std::get<2>(splitting);
+		}
+	
+		constexpr bool try_drop_prefix (size_t count)
+		{
+			const auto splitting = split_prefix(count);
+			if (std::get<2>(splitting) == count)
 				*this = std::get<1>(splitting);
-			}
-
-			template <Callable<bool, char32_t> C>
-			constexpr void drop_prefix (C predictor)
-			{
-				const auto splitting = split_prefix(std::move(predictor));
+			return std::get<2>(splitting) == count;
+		}
+	
+		template <BoundedSequence<char32_t> S>
+		constexpr bool try_drop_prefix (S other)
+		{
+			const auto splitting = split_prefix(std::move(other));
+			if (not std::get<2>(splitting))
 				*this = std::get<1>(splitting);
-			}
-
-			template <Sequence<char32_t> S>
-			constexpr void drop_prefix (S other)
-			{
-				const auto splitting = split_prefix(std::move(other));
-				*this = std::get<1>(splitting);
-			}
-
-
-
-
-			// ----------------------------------------
-			// Prefix shrinking trial
-
-			constexpr bool try_take_prefix (size_t count)
-			{
-				const auto splitting = split_prefix(count);
-				if (std::get<2>(splitting) == count)
-					*this = std::get<0>(splitting);
-				return std::get<2>(splitting) == count;
-			}
-
-			template <BoundedSequence<char32_t> S>
-			constexpr bool try_take_prefix (S other)
-			{
-				const auto splitting = split_prefix(std::move(other));
-				if (not std::get<2>(splitting))
-					*this = std::get<0>(splitting);
-				return not std::get<2>(splitting);
-			}
-
-			constexpr bool try_drop_prefix (size_t count)
-			{
-				const auto splitting = split_prefix(count);
-				if (std::get<2>(splitting) == count)
-					*this = std::get<1>(splitting);
-				return std::get<2>(splitting) == count;
-			}
-
-			template <BoundedSequence<char32_t> S>
-			constexpr bool try_drop_prefix (S other)
-			{
-				const auto splitting = split_prefix(std::move(other));
-				if (not std::get<2>(splitting))
-					*this = std::get<1>(splitting);
-				return not std::get<2>(splitting);
-			}
-
-
-
-
-			// ----------------------------------------
-			// Prefix splitting
-
-			constexpr std::tuple<text_view, text_view, size_t> split_prefix (size_t count) const;
-
-			template <Callable<bool, char32_t> C>
-			constexpr std::tuple<text_view, text_view> split_prefix (C predictor) const;
-			
-			template <typename V, Callable<std::tuple<V, bool>, V, char32_t> C>
-			constexpr std::tuple<text_view, text_view, V> split_prefix (C predictor, V variable) const;
-			
-			template <Sequence<char32_t> S>
-			constexpr std::tuple<text_view, text_view, S> split_prefix (S other) const;
+			return not std::get<2>(splitting);
+		}
+	
+	
+	
+	
+		// ----------------------------------------
+		// Prefix splitting
+	
+		constexpr std::tuple<text_view, text_view, size_t> split_prefix (size_t count) const;
+	
+		template <Callable<bool, char32_t> C>
+		constexpr std::tuple<text_view, text_view> split_prefix (C predictor) const;
+		
+		template <typename V, Callable<std::tuple<V, bool>, V, char32_t> C>
+		constexpr std::tuple<text_view, text_view, V> split_prefix (C predictor, V variable) const;
+		
+		template <Sequence<char32_t> S>
+		constexpr std::tuple<text_view, text_view, S> split_prefix (S other) const;
 
 			
 
