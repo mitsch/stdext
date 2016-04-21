@@ -2,8 +2,8 @@
 /// @author Michael Koch
 /// @copyright CC BY 3.0
 
-#ifndef __INTEGRAL_LIST_HPP__
-#define __INTEGRAL_LIST_HPP__
+#ifndef __STDEXT_INTEGRAL_LIST_HPP__
+#define __STDEXT_INTEGRAL_LIST_HPP__
 
 #include <stdext/callable.hpp>
 #include <stdext/integral_constant.hpp>
@@ -14,13 +14,24 @@ namespace stdext
 	/// List of integrals
 	///
 	/// The list contains values of type \a A without direct initialisation.
-	template <typename A, A ... as>
+	template <typename A, A ... B>
 	struct integral_list
 	{
-		template <A B> using appending = integral_list<A, as ..., B>;
-		template <typename B> struct _appending;
-		template <A ... B> struct _appending<integral_list<A, B ...>> {using type = integral_list<A, as ..., B ...>;};
-		template <typename B> using list_appending = _appending<B>::type;
+		
+		template <typename C, typename ... D> struct appender;
+		template <A ... C, A D, typename  ... E> struct appender<integral_list<A, C ...>, integral_constant<A, D>, E ...> : appender<integral_list<A, C ..., D>, E ...> {};
+		template <A ... C, A ... D, typename ... E> struct appender<integral_list<A, C ...>, integral_list<A, D ...>, E ...> : appender<integral_list<A, C ..., D ...>, E ...> {};
+		template <A ... C> struct appender<integral_list<A, C ...>> {using type = integral_list<A, C ....>;};
+		template <typename ... C> using appending = typename appender<integral_list<A, B ...>, C ...>::type;
+
+
+		template <typename C, typename D, A E> struct one_inserter;
+		template <A C, A ... D, A ... E> struct one_inserter<integral_list<A, C, D ...>, integral_list<A, E ...>, C> {using type = integral_list<A, E ..., C, D ...>;};
+		template <A C, A ... D, A ... E, A F> requires C < F struct one_inserter<integral_list<A, C, D ...>, integral_list<A, E ...>, A F> : one_inserter<integral_list<A, D ...>, integral_list<A, E ..., C>, F> {};
+		template <A C, A ... D, A ... E, A F> requires C > F struct one_inserter<integral_list<A, C, D ...>, integral_list<A, E ...>, A F> {using type = integral_list<A, E ..., F, C, D ...>;};
+		template <A ... C, A D> struct one_inserter<integral_list<A>, integral_list<A, C ...>, A D> {using type = integral_list<A, C ..., D>;};
+
+
 
 		/// 
 		template <typename V, typename C, typename ... Args>
@@ -184,11 +195,6 @@ namespace stdext
 				{return *this;}
 			};
 			return holder<Vs ...>::insert(value, integral_list<T>());
-		}
-
-		constexpr auto sort () const
-		{
-			template <T ... 
 		}
 	};
 
