@@ -23,7 +23,7 @@ namespace integral
 	template <typename A, bool B, A ... C> struct set_negation<set<A, B, C ...>> {using type = set<A, not B, C ...>;};
 
 
-	// TODO set_interaction, set_difference, set_from_constant, set_from_list, set_to_list
+	// TODO set_difference, set_from_list, set_to_list
 	
 
 	// Element testing in a set
@@ -74,17 +74,56 @@ namespace integral
 		{using type = set<A, E, F ..., C, D ...>;};
 	template <typename A, bool B, bool C, bool D, A ... E> struct set_union<set<A, B>, set<A, C>, set<A, D, E ...>>
 		{using type = set<A, D, E ...>;};
+
+
+	template <typename, typename, typename ...> struct set_intersection {};
+	template <typename A, bool B, A ... C, bool D, A ... E> struct set_intersection<set<A, B, C ...>, set<A, D, E ...>>
+		: set_intersection<set<A, B, C ...>, set<A, D, E ...>, set<A, B and D>> {};
+	template <typename A, A B, A ... C, A ... D, bool E, A ... F> struct set_intersection<set<A, true, B, C ...>, set<A, true, B, D ...>, set<A, E, F ...>>
+		: set_intersection<set<A, false, C ...>, set<A, false, D ...>, set<A, E, F ..., B>> {};
+	template <typename A, A B, A ... C, A ... D, bool E, A ... F> struct set_intersection<set<A, false, B, C ...>, set<A, true, B, D ...>, set<A, E, F ...>>
+		: set_intersection<set<A, false, B, C ...>, set<A, false, D ...>, set<A, E, F ...>> {};
+	template <typename A, A B, A ... C, A ... D, bool E, A ... F> struct set_intersection<set<A, true, B, C ...>, set<A, false, B, D ...>, set<A, E, F ...>>
+		: set_intersection<set<A, false, C ...>, set<A, false, B, D ...>, set<A, E, F ...>> {};
+	template <typename A, A B, A ... C, A ... D, bool E, A ... F> struct set_intersection<set<A, false, B, C ...>, set<A, false, B, D ...>, set<A, E, F ...>>
+		: set_intersection<set<A, true, C ...>, set<A, true, D ...>, set<A, E, F ..., B>> {};
+	template <typename A, bool B, A C, A ... D, bool E, A F, A ... G, bool H, A ... I> struct set_intersection<set<A, B, C, D ...>, set<A, E, F, G ...>, set<A, H, I ...>>
+		: set_intersection<set<A, B, C, D ...>, set<A, E, F, G ...>, set<A, H, I ...>, C < F> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, true, B, C ...>, set<A, true, D, E ...>, set<A, F, G ...>, true>
+		: set_intersection<set<A, false, C ...>, set<A, true, D, E ...>, set<A, F, G ..., B>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, true, B, C ...>, set<A, true, D, E ...>, set<A, F, G ...>, false>
+		: set_intersection<set<A, true, B, C ...>, set<A, false, E ...>, set<A, F, G ..., D>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, true, B, C ...>, set<A, false, D, E ...>, set<A, F, G ...>, true>
+		: set_intersection<set<A, false, C ...>, set<A, false, D, E ...>, set<A, F, G ...>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, true, B, C ...>, set<A, false, D, E ...>, set<A, F, G ...>, false>
+		: set_intersection<set<A, true, B, C ...>, set<A, true, E ...>, set<A, F, G ..., D>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, false, B, C ...>, set<A, true, D, E ...>, set<A, F, G ...>, true>
+		: set_intersection<set<A, true, C ...>, set<A, true, D, E ...>, set<A, F, G ..., B>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, false, B, C ...>, set<A, true, D, E ...>, set<A, F, G ...>, false>
+		: set_intersection<set<A, false, B, C ...>, set<A, false, E ...>, set<A, F, G ...>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, false, B, C ...>, set<A, false, D, E ...>, set<A, F, G ...>, true>
+		: set_intersection<set<A, true, C ...>, set<A, false, D, E ...>, set<A, F, G ...>> {};
+	template <typename A, A B, A ... C, A D, A ... E, bool F, A ... G> struct set_intersection<set<A, false, B, C ...>, set<A, false, D, E ...>, set<A, F, G ...>, false>
+		: set_intersection<set<A, false, B, C ...>, set<A, true, E ...>, set<A, F, G ...>> {};
+	template <typename A, bool B, A C, A ... D, bool E, A ... F> struct set_intersection<set<A, B, C, D ...>, set<A, true>, set<A, E, F ...>>
+		{using type = set<A, E, F ..., C, D ...>;};
+	template <typename A, bool B, A C, A ... D, bool E, A ... F> struct set_intersection<set<A, true>, set<A, B, C, D ...>, set<A, E, F ...>>
+		{using type = set<A, E, F ..., C, D ...>;};
+	template <typename A, bool B, A C, A ... D, bool E, A ... F> struct set_intersection<set<A, B, C, D ...>, set<A, false>, set<A, E, F ...>>
+		{using type = set<A, E, F ...>;};
+	template <typename A, bool B, A C, A ... D, bool E, A ... F> struct set_intersection<set<A, false>, set<A, B, C, D ...>, set<A, E, F ...>>
+		{using type = set<A, E, F ...>;};
+	template <typename A, bool B, bool C, bool D, A ... E> struct set_intersection<set<A, B>, set<A, C>, set<A, D, E ...>>
+		{using type = set<A, D, E ...>;};
+	
 	
 	 
-	
-	
+	template <typename, typename ...> struct set_from_constant {};
+	template <typename A, A B> struct set_from_constant<constant<A, B>> : set_from_constant<constant<A, B>, B<B+1> {};
+	template <typename A, A B> struct set_from_constant<constant<A, B>, true> {using type = set<A, false, B, B+1>;};
+	template <typename A, A B> struct set_from_constant<constant<A, B>, false> {using type = set<A, false, B>;};
 
-	template <typename, typename ...> struct set_constant {};
-	template <typename A, A B> struct set_constant<constant<A, B>> : set_constant<constant<A, B>, B<B+1> {};
-	template <typename A, A B> struct set_constant<constant<A, B>, true> {using type = set<A, false, B, B+1>;};
-	template <typename A, A B> struct set_constant<constant<A, B>, false> {using type = set<A, false, B>;};
-
-
+	template <typename, typename ...> struct set_from_list {};
 
 }
 }
