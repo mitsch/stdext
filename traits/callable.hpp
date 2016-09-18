@@ -17,6 +17,8 @@ namespace stdext
 namespace traits
 {
 
+	// TODO constant returns, that is single values!
+
 	template <typename A, typename ... B> inline auto call (A&& callee, B&& ... arguments)
 		noexcept(noexcept(forward<A>(callee)(forward<B>(arguments) ...)))
 	{
