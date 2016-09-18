@@ -5,6 +5,8 @@
 /// @copyright CC BY 3.0
 
 #include <stdext/integral/constant.hpp>
+#include <stdext/types/cv.hpp>
+#include <stdext/types/primitives.hpp>
 
 #ifndef STDEXT__TYPES__REFERENCES
 #define STDEXT__TYPES__REFERENCES
